@@ -1,3 +1,4 @@
+use kitsune_vault::error::VaultError;
 use thiserror::Error;
 pub type AgentResult<T> = Result<T, AgentError>;
 
@@ -32,4 +33,17 @@ pub enum AgentError {
 
     #[error("Internal agent error: {0}")]
     Internal(String),
+
+    #[error("IPC channel disconnected")]
+    IpcDisconnected,
+
+    #[error("Invalid parameter '{param}': {reason}")]
+    InvalidParameters { param: String, reason: String },
 }
+
+impl From<VaultError> for AgentError {
+    fn from(error: VaultError) -> Self {
+        AgentError::VaultAccessDenied(error.to_string())
+    }
+}
+

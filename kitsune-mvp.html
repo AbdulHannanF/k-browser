@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KitsuneBrowser — MVP</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #08080D;
+    --bg1:       #0F0F18;
+    --bg2:       #14141F;
+    --bg3:       #1C1C2C;
+    --bg4:       #222235;
+    --amber:     #FF7A00;
+    --amber2:    #FFB347;
+    --amber-dim: rgba(255,122,0,0.12);
+    --amber-glow:rgba(255,122,0,0.25);
+    --green:     #39E88F;
+    --green-dim: rgba(57,232,143,0.12);
+    --red:       #FF4D6A;
+    --red-dim:   rgba(255,77,106,0.12);
+    --blue:      #4A9EFF;
+    --blue-dim:  rgba(74,158,255,0.12);
+    --text0:     #F2F2FA;
+    --text1:     #B8B8D0;
+    --text2:     #6A6A8A;
+    --border:    rgba(255,255,255,0.06);
+    --border2:   rgba(255,122,0,0.20);
+    --r:         8px;
+    --r2:        12px;
+  }
+
+  html, body { height: 100%; background: var(--bg); color: var(--text0); font-family: 'Inter', sans-serif; overflow: hidden; }
+
+  /* ── LAYOUT ── */
+  .shell { display: grid; grid-template-rows: 44px 1fr; height: 100vh; }
+  .main  { display: grid; grid-template-columns: 300px 1fr 200px; overflow: hidden; }
+
+  /* ── TOP BAR ── */
+  .topbar {
+    background: var(--bg1);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 10px; padding: 0 14px;
+    position: relative; z-index: 50;
+    box-shadow: 0 1px 0 var(--border), 0 4px 20px rgba(0,0,0,0.4);
+  }
+  .logo {
+    display: flex; align-items: center; gap: 8px;
+    font-family: 'Syne', sans-serif; font-weight: 800; font-size: 15px;
+    color: var(--text0); white-space: nowrap;
+  }
+  .logo .fox { font-size: 18px; filter: drop-shadow(0 0 6px var(--amber)); }
+  .logo span { color: var(--amber); }
+  .nav-sep { width: 1px; height: 20px; background: var(--border); margin: 0 2px; flex-shrink: 0; }
+  .nav-btn {
+    width: 28px; height: 28px; border: none; background: transparent; color: var(--text2);
+    cursor: pointer; border-radius: 6px; font-size: 13px;
+    display: flex; align-items: center; justify-content: center;
+    transition: background .15s, color .15s;
+  }
+  .nav-btn:hover { background: var(--bg3); color: var(--text0); }
+  .address-wrap {
+    flex: 1; display: flex; align-items: center; gap: 8px;
+    background: var(--bg3); border: 1px solid var(--border); border-radius: var(--r);
+    padding: 0 12px; height: 28px;
+  }
+  .lock-icon { color: var(--green); font-size: 11px; }
+  .address-input {
+    flex: 1; background: none; border: none; outline: none;
+    color: var(--text0); font-family: 'JetBrains Mono', monospace; font-size: 12px;
+  }
+  .privacy-pill {
+    display: flex; align-items: center; gap: 5px;
+    background: var(--green-dim); border: 1px solid rgba(57,232,143,0.25);
+    border-radius: 20px; padding: 3px 10px; font-size: 11px; color: var(--green);
+    font-family: 'JetBrains Mono', monospace; white-space: nowrap;
+    animation: pill-in .4s ease both;
+  }
+  @keyframes pill-in { from { opacity:0; transform:scale(.9); } to { opacity:1; transform:scale(1); } }
+
+  /* ── TABS (in topbar) ── */
+  .tabs { display: flex; align-items: center; gap: 2px; }
+  .tab {
+    padding: 4px 12px; border-radius: 6px; font-size: 12px; cursor: pointer;
+    color: var(--text2); transition: background .15s, color .15s; white-space: nowrap;
+  }
+  .tab.active { background: var(--amber-dim); color: var(--amber); border: 1px solid var(--border2); }
+  .tab:not(.active):hover { background: var(--bg3); color: var(--text1); }
+
+  /* ── LEFT PANEL — AGENT ── */
+  .left {
+    background: var(--bg1); border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .panel-header {
+    padding: 16px 16px 12px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .panel-title {
+    font-family: 'Syne', sans-serif; font-weight: 700; font-size: 13px;
+    letter-spacing: .04em; text-transform: uppercase; color: var(--text1);
+  }
+  .status-dot {
+    width: 7px; height: 7px; border-radius: 50%; background: var(--green);
+    box-shadow: 0 0 8px var(--green); animation: pulse 2s ease infinite;
+  }
+  @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:.4;} }
+
+  /* Command input */
+  .cmd-area { padding: 12px 14px; border-bottom: 1px solid var(--border); }
+  .cmd-row { display: flex; gap: 6px; }
+  .cmd-input {
+    flex: 1; background: var(--bg3); border: 1px solid var(--border);
+    border-radius: var(--r); padding: 7px 11px; color: var(--text0);
+    font-family: 'JetBrains Mono', monospace; font-size: 12px; outline: none;
+    transition: border .15s;
+  }
+  .cmd-input:focus { border-color: var(--amber); box-shadow: 0 0 0 2px var(--amber-dim); }
+  .cmd-input::placeholder { color: var(--text2); }
+  .run-btn {
+    padding: 7px 14px; background: var(--amber); border: none; border-radius: var(--r);
+    color: #000; font-family: 'Syne', sans-serif; font-weight: 700; font-size: 12px;
+    cursor: pointer; transition: background .15s, transform .1s;
+    white-space: nowrap;
+  }
+  .run-btn:hover { background: var(--amber2); }
+  .run-btn:active { transform: scale(.97); }
+
+  /* Agent cards */
+  .agent-cards { padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; }
+  .agent-card {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: var(--r); padding: 10px 12px;
+    cursor: pointer; transition: border .15s, background .15s;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .agent-card:hover { border-color: var(--border2); background: var(--bg3); }
+  .agent-card.active { border-color: var(--amber); background: var(--amber-dim); }
+  .agent-icon { font-size: 16px; flex-shrink: 0; }
+  .agent-info { flex: 1; min-width: 0; }
+  .agent-name { font-size: 12px; font-weight: 500; color: var(--text0); margin-bottom: 2px; }
+  .agent-desc { font-size: 11px; color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .agent-status { font-size: 10px; padding: 2px 7px; border-radius: 20px; flex-shrink: 0; font-family: 'JetBrains Mono', monospace; }
+  .agent-status.running { background: var(--amber-dim); color: var(--amber); border: 1px solid var(--border2); }
+  .agent-status.idle    { background: var(--bg4); color: var(--text2); border: 1px solid var(--border); }
+  .agent-status.done    { background: var(--green-dim); color: var(--green); border: 1px solid rgba(57,232,143,0.25); }
+
+  /* Log area */
+  .log-section { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+  .log-header { padding: 10px 14px 6px; font-family: 'Syne', sans-serif; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--text2); }
+  .log-scroll { flex: 1; overflow-y: auto; padding: 0 14px 10px; display: flex; flex-direction: column; gap: 3px; }
+  .log-scroll::-webkit-scrollbar { width: 3px; }
+  .log-scroll::-webkit-scrollbar-thumb { background: var(--bg4); border-radius: 2px; }
+  .log-entry {
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    line-height: 1.7; color: var(--text2); padding: 1px 0;
+    animation: log-in .2s ease both;
+  }
+  .log-entry.cmd  { color: var(--text0); }
+  .log-entry.info { color: var(--text1); }
+  .log-entry.ok   { color: var(--green); }
+  .log-entry.warn { color: var(--amber); }
+  .log-entry.block{ color: var(--red); }
+  @keyframes log-in { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:translateY(0); } }
+
+  /* Budget gauge */
+  .budget-area { padding: 10px 14px 14px; border-top: 1px solid var(--border); }
+  .budget-label { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 11px; color: var(--text2); font-family: 'JetBrains Mono', monospace; }
+  .budget-bar { height: 4px; background: var(--bg4); border-radius: 2px; overflow: hidden; }
+  .budget-fill {
+    height: 100%; width: 34%; border-radius: 2px;
+    background: linear-gradient(90deg, var(--amber), var(--amber2));
+    box-shadow: 0 0 8px var(--amber-glow);
+    transition: width .6s ease;
+  }
+
+  /* ── CENTER — CONTENT ── */
+  .center { background: var(--bg); position: relative; overflow: hidden; }
+  .webview-mock {
+    width: 100%; height: 100%; background: #fff;
+    position: relative; overflow: auto;
+  }
+  /* mock page */
+  .mock-page {
+    font-family: 'Inter', sans-serif; background: #fff; color: #111;
+    min-height: 100%;
+  }
+  .mock-nav {
+    background: #00285A; padding: 14px 24px; display: flex; align-items: center; gap: 20px;
+  }
+  .mock-nav .brand { color: #fff; font-weight: 700; font-size: 18px; }
+  .mock-nav a { color: rgba(255,255,255,.7); font-size: 13px; text-decoration: none; }
+  .mock-search {
+    padding: 20px 24px; background: linear-gradient(135deg, #00285A 0%, #0050A0 100%);
+    display: flex; flex-direction: column; gap: 14px;
+  }
+  .mock-search h1 { color: #fff; font-size: 22px; font-weight: 700; }
+  .mock-search-bar {
+    display: flex; gap: 0; border-radius: 8px; overflow: hidden;
+    box-shadow: 0 4px 20px rgba(0,0,0,.3);
+  }
+  .mock-field {
+    flex: 1; padding: 13px 16px; border: none; outline: none;
+    font-size: 14px; background: #fff; border-right: 1px solid #eee;
+  }
+  .mock-field.highlighted { background: #FFFDE7; outline: 2px solid #FFD700; }
+  .mock-field.filled      { background: #F0FFF4; outline: 2px solid #4ADE80; }
+  .mock-search-btn { padding: 13px 24px; background: #FF7700; color: #fff; border: none; font-weight: 700; font-size: 14px; cursor: pointer; }
+  .results { padding: 20px 24px; }
+  .results h3 { font-size: 14px; color: #555; margin-bottom: 14px; }
+  .flight-card {
+    border: 1px solid #E8E8E8; border-radius: 10px; padding: 16px 20px;
+    display: flex; align-items: center; gap: 20px; margin-bottom: 10px;
+    transition: box-shadow .2s;
+  }
+  .flight-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,.1); }
+  .flight-card.best { border-color: #FF7700; box-shadow: 0 0 0 2px rgba(255,119,0,.15); }
+  .flight-airline { font-size: 12px; color: #666; width: 70px; flex-shrink: 0; }
+  .flight-route { flex: 1; }
+  .flight-times { font-size: 16px; font-weight: 600; color: #111; }
+  .flight-detail { font-size: 12px; color: #888; margin-top: 2px; }
+  .flight-price { font-size: 20px; font-weight: 700; color: #111; }
+  .flight-price.best { color: #FF7700; }
+  .best-badge { background: #FF7700; color: #fff; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 3px; }
+  .book-btn { padding: 10px 20px; background: #0050A0; color: #fff; border: none; border-radius: 6px; font-weight: 600; font-size: 13px; cursor: pointer; white-space: nowrap; }
+  .book-btn.active { background: #FF7700; }
+
+  /* Agent highlight overlay on center */
+  .agent-cursor {
+    position: absolute; width: 20px; height: 20px; border-radius: 50%;
+    background: var(--amber); border: 2px solid #fff;
+    box-shadow: 0 0 12px var(--amber), 0 0 24px var(--amber-glow);
+    pointer-events: none; z-index: 10; opacity: 0;
+    transition: left .4s cubic-bezier(.4,0,.2,1), top .4s cubic-bezier(.4,0,.2,1), opacity .2s;
+  }
+
+  /* ── RIGHT PANEL — SESSION ── */
+  .right {
+    background: var(--bg1); border-left: 1px solid var(--border);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .stat-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 14px; border-bottom: 1px solid var(--border);
+    font-size: 11px;
+  }
+  .stat-label { color: var(--text2); font-family: 'JetBrains Mono', monospace; }
+  .stat-val   { color: var(--text0); font-family: 'JetBrains Mono', monospace; font-weight: 500; }
+  .stat-val.ok  { color: var(--green); }
+  .stat-val.warn { color: var(--amber); }
+  .stat-val.bad { color: var(--red); }
+
+  .cap-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 9px 14px; border-bottom: 1px solid var(--border); font-size: 11px;
+  }
+  .cap-icon { font-size: 13px; width: 18px; flex-shrink: 0; }
+  .cap-name { flex: 1; color: var(--text1); }
+  .cap-badge {
+    font-family: 'JetBrains Mono', monospace; font-size: 10px;
+    padding: 1px 6px; border-radius: 3px;
+  }
+  .cap-badge.on  { background: var(--green-dim); color: var(--green); border: 1px solid rgba(57,232,143,.3); }
+  .cap-badge.off { background: var(--bg3); color: var(--text2); border: 1px solid var(--border); }
+
+  /* Vault mini */
+  .vault-section { padding: 12px 14px; border-top: 1px solid var(--border); margin-top: auto; }
+  .vault-title { font-family: 'Syne', sans-serif; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--text2); margin-bottom: 8px; }
+  .vault-item { display: flex; align-items: center; gap: 7px; padding: 6px 0; font-size: 11px; }
+  .vault-item .vi-icon { font-size: 12px; }
+  .vault-item .vi-name { flex: 1; color: var(--text1); }
+  .vault-item .vi-status { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--text2); }
+
+  /* ── HIL GATE OVERLAY ── */
+  .hil-overlay {
+    position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center;
+    background: rgba(8,8,13,.75); backdrop-filter: blur(8px);
+    opacity: 0; pointer-events: none;
+    transition: opacity .25s;
+  }
+  .hil-overlay.visible { opacity: 1; pointer-events: all; }
+
+  .hil-card {
+    width: 420px; background: var(--bg2); border: 1px solid var(--amber);
+    border-radius: var(--r2); overflow: hidden;
+    box-shadow: 0 0 0 1px var(--amber-dim), 0 0 60px rgba(255,122,0,.15), 0 24px 80px rgba(0,0,0,.6);
+    transform: translateY(20px) scale(.97);
+    transition: transform .3s cubic-bezier(.34,1.56,.64,1);
+  }
+  .hil-overlay.visible .hil-card { transform: translateY(0) scale(1); }
+
+  .hil-top {
+    padding: 20px 24px 16px;
+    background: linear-gradient(135deg, rgba(255,122,0,.08) 0%, transparent 60%);
+    border-bottom: 1px solid var(--border);
+  }
+  .hil-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--amber-dim); border: 1px solid var(--border2);
+    border-radius: 20px; padding: 3px 10px; font-size: 11px; color: var(--amber);
+    font-family: 'Syne', sans-serif; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+  .hil-badge::before { content:''; width:7px; height:7px; border-radius:50%; background:var(--amber); animation:pulse 1s ease infinite; }
+  .hil-title { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 18px; color: var(--text0); margin-bottom: 4px; }
+  .hil-sub   { font-size: 13px; color: var(--text1); }
+
+  .hil-action {
+    margin: 16px 24px; background: var(--bg3); border: 1px solid var(--border);
+    border-radius: var(--r); padding: 14px 16px;
+  }
+  .hil-action-label { font-size: 11px; color: var(--text2); font-family: 'JetBrains Mono', monospace; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 10px; }
+  .hil-action-row   { display: flex; justify-content: space-between; font-size: 12px; padding: 4px 0; border-bottom: 1px solid var(--border); }
+  .hil-action-row:last-child { border: none; }
+  .hil-action-row .key { color: var(--text2); font-family: 'JetBrains Mono', monospace; }
+  .hil-action-row .val { color: var(--text0); font-weight: 500; }
+  .hil-action-row .val.price { color: var(--amber); font-family: 'Syne', sans-serif; font-weight: 800; font-size: 15px; }
+
+  .hil-timer {
+    margin: 0 24px 16px; display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--text2); font-family: 'JetBrains Mono', monospace;
+  }
+  .hil-timer-bar { flex: 1; height: 3px; background: var(--bg4); border-radius: 2px; overflow: hidden; }
+  .hil-timer-fill { height: 100%; background: var(--amber); border-radius: 2px; animation: timer-drain 30s linear forwards; }
+  @keyframes timer-drain { from{width:100%;} to{width:0%;} }
+
+  .hil-btns { padding: 0 24px 20px; display: flex; gap: 10px; }
+  .hil-confirm {
+    flex: 1; padding: 12px; background: var(--amber); border: none; border-radius: var(--r);
+    color: #000; font-family: 'Syne', sans-serif; font-weight: 800; font-size: 14px;
+    cursor: pointer; transition: background .15s, transform .1s;
+  }
+  .hil-confirm:hover { background: var(--amber2); }
+  .hil-confirm:active { transform: scale(.98); }
+  .hil-cancel {
+    padding: 12px 20px; background: transparent; border: 1px solid var(--border);
+    border-radius: var(--r); color: var(--text1); font-size: 14px; cursor: pointer;
+    transition: border .15s, color .15s;
+  }
+  .hil-cancel:hover { border-color: var(--red); color: var(--red); }
+
+  /* ── SUCCESS TOAST ── */
+  .toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px);
+    background: var(--bg2); border: 1px solid var(--green); border-radius: var(--r);
+    padding: 12px 20px; display: flex; align-items: center; gap: 10px;
+    font-size: 13px; color: var(--text0); z-index: 200;
+    box-shadow: 0 0 24px rgba(57,232,143,.15);
+    transition: transform .4s cubic-bezier(.34,1.56,.64,1), opacity .3s;
+    opacity: 0;
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+  .toast-icon { color: var(--green); font-size: 18px; }
+
+  /* ── PRIVACY REPORT PANEL ── */
+  .privacy-panel {
+    position: absolute; bottom: 0; left: 0; right: 0; z-index: 20;
+    background: var(--bg1); border-top: 1px solid var(--border);
+    transform: translateY(100%); transition: transform .3s ease;
+    padding: 16px 20px; display: flex; gap: 30px; align-items: center;
+  }
+  .privacy-panel.visible { transform: translateY(0); }
+  .priv-stat { text-align: center; }
+  .priv-stat .num { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 24px; color: var(--amber); }
+  .priv-stat .lbl { font-size: 11px; color: var(--text2); margin-top: 2px; }
+  .priv-divider { width: 1px; height: 40px; background: var(--border); }
+
+  /* Scanline texture */
+  .shell::after {
+    content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 1000;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,.015) 2px, rgba(0,0,0,.015) 4px);
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--bg4); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<div class="shell">
+
+  <!-- ── TOP BAR ── -->
+  <div class="topbar">
+    <div class="logo">
+      <span class="fox">🦊</span>
+      Kitsune<span>Browser</span>
+    </div>
+    <div class="nav-sep"></div>
+
+    <div class="tabs">
+      <div class="tab active">✈ Flight Booking</div>
+      <div class="tab">📄 Job Apply</div>
+      <div class="tab">🔬 Research</div>
+      <div class="tab" style="color:var(--text2); font-size:18px; padding:0 8px;">+</div>
+    </div>
+
+    <div class="nav-sep"></div>
+    <button class="nav-btn" title="Back">◀</button>
+    <button class="nav-btn" title="Forward">▶</button>
+    <button class="nav-btn" id="reload-btn" title="Reload">↻</button>
+
+    <div class="address-wrap">
+      <span class="lock-icon">🔒</span>
+      <input class="address-input" id="url-bar" value="https://www.skyscanner.com/flights/lhr/ber" />
+    </div>
+
+    <div class="privacy-pill" id="privacy-pill">🛡 0 blocked</div>
+  </div>
+
+  <!-- ── MAIN ── -->
+  <div class="main">
+
+    <!-- ── LEFT: AGENT ── -->
+    <div class="left">
+      <div class="panel-header">
+        <span class="panel-title">Agent Workspace</span>
+        <div class="status-dot" id="status-dot" style="background:var(--text2); box-shadow:none;"></div>
+      </div>
+
+      <div class="cmd-area">
+        <div class="cmd-row">
+          <input class="cmd-input" id="cmd-input" placeholder="book cheapest flight to Berlin…" />
+          <button class="run-btn" id="run-btn">▶ Run</button>
+        </div>
+      </div>
+
+      <div class="agent-cards" id="agent-cards">
+        <div class="agent-card" id="card-price" data-agent="price">
+          <span class="agent-icon">✈</span>
+          <div class="agent-info">
+            <div class="agent-name">PriceTracker</div>
+            <div class="agent-desc">Monitor &amp; compare flight fares</div>
+          </div>
+          <span class="agent-status idle" id="price-status">idle</span>
+        </div>
+        <div class="agent-card" id="card-form" data-agent="form">
+          <span class="agent-icon">📝</span>
+          <div class="agent-info">
+            <div class="agent-name">FormFillAgent</div>
+            <div class="agent-desc">Auto-fill checkout forms</div>
+          </div>
+          <span class="agent-status idle" id="form-status">idle</span>
+        </div>
+        <div class="agent-card" id="card-research" data-agent="research">
+          <span class="agent-icon">🔬</span>
+          <div class="agent-info">
+            <div class="agent-name">ResearchAgent</div>
+            <div class="agent-desc">Extract &amp; summarise web data</div>
+          </div>
+          <span class="agent-status idle" id="research-status">idle</span>
+        </div>
+      </div>
+
+      <div class="log-section">
+        <div class="log-header">Agent Log</div>
+        <div class="log-scroll" id="log-scroll"></div>
+      </div>
+
+      <div class="budget-area">
+        <div class="budget-label">
+          <span>Monthly Budget</span>
+          <span id="budget-num">34 / 100 actions</span>
+        </div>
+        <div class="budget-bar"><div class="budget-fill" id="budget-fill"></div></div>
+      </div>
+    </div>
+
+    <!-- ── CENTER: WEBVIEW ── -->
+    <div class="center" id="center">
+      <div class="webview-mock">
+        <div class="mock-page">
+          <div class="mock-nav">
+            <span class="brand">✈ Skyscanner</span>
+            <a href="#">Flights</a><a href="#">Hotels</a><a href="#">Car Hire</a>
+          </div>
+          <div class="mock-search">
+            <h1>Find the cheapest flights</h1>
+            <div class="mock-search-bar">
+              <input class="mock-field" id="field-from" placeholder="From: London" value="London Heathrow (LHR)">
+              <input class="mock-field" id="field-to"   placeholder="To: Berlin"  value="Berlin (BER)">
+              <input class="mock-field" id="field-date" placeholder="Date"         value="Tue 12 Mar 2025">
+              <button class="mock-search-btn">Search</button>
+            </div>
+          </div>
+
+          <div class="results">
+            <h3>47 results — sorted by price</h3>
+
+            <div class="flight-card best" id="flight-best">
+              <div class="flight-airline"><strong>easyJet</strong><br><small>EZY 1234</small></div>
+              <div class="flight-route">
+                <div class="flight-times">08:30 → 11:15</div>
+                <div class="flight-detail">2h 45m · Direct · LHR → BER</div>
+              </div>
+              <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
+                <div class="flight-price best">€194</div>
+                <span class="best-badge">CHEAPEST</span>
+              </div>
+              <button class="book-btn active" id="book-btn">Select →</button>
+            </div>
+
+            <div class="flight-card">
+              <div class="flight-airline"><strong>Ryanair</strong><br><small>FR 2201</small></div>
+              <div class="flight-route">
+                <div class="flight-times">11:00 → 14:05</div>
+                <div class="flight-detail">3h 05m · Direct · STN → BER</div>
+              </div>
+              <div><div class="flight-price">€211</div></div>
+              <button class="book-btn">Select →</button>
+            </div>
+
+            <div class="flight-card">
+              <div class="flight-airline"><strong>Lufthansa</strong><br><small>LH 902</small></div>
+              <div class="flight-route">
+                <div class="flight-times">14:20 → 17:05</div>
+                <div class="flight-detail">2h 45m · Direct · LHR → BER</div>
+              </div>
+              <div><div class="flight-price">€259</div></div>
+              <button class="book-btn">Select →</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Animated agent cursor dot -->
+      <div class="agent-cursor" id="agent-cursor"></div>
+
+      <!-- Privacy report bar -->
+      <div class="privacy-panel" id="priv-panel">
+        <div class="priv-stat"><div class="num" id="pr-blocked">3</div><div class="lbl">Trackers Blocked</div></div>
+        <div class="priv-divider"></div>
+        <div class="priv-stat"><div class="num" id="pr-referer">7</div><div class="lbl">Referers Stripped</div></div>
+        <div class="priv-divider"></div>
+        <div class="priv-stat"><div class="num" style="color:var(--green)">TLS 1.3</div><div class="lbl">Connection</div></div>
+        <div class="priv-divider"></div>
+        <div class="priv-stat"><div class="num" style="color:var(--green)">Active</div><div class="lbl">DNT + GPC</div></div>
+        <button onclick="document.getElementById('priv-panel').classList.remove('visible')" style="margin-left:auto;background:none;border:none;color:var(--text2);cursor:pointer;font-size:16px;">✕</button>
+      </div>
+    </div>
+
+    <!-- ── RIGHT: SESSION ── -->
+    <div class="right">
+      <div class="panel-header">
+        <span class="panel-title">Session</span>
+      </div>
+
+      <div class="stat-row"><span class="stat-label">status</span><span class="stat-val ok">● Active</span></div>
+      <div class="stat-row"><span class="stat-label">mode</span><span class="stat-val">Agent-First</span></div>
+      <div class="stat-row"><span class="stat-label">tls</span><span class="stat-val ok">1.3</span></div>
+      <div class="stat-row"><span class="stat-label">trackers</span><span class="stat-val warn" id="tracker-count">0 blocked</span></div>
+      <div class="stat-row"><span class="stat-label">referer</span><span class="stat-val ok">stripped</span></div>
+      <div class="stat-row"><span class="stat-label">fingerprint</span><span class="stat-val ok">hardened</span></div>
+      <div class="stat-row"><span class="stat-label">hil gate</span><span class="stat-val ok">armed</span></div>
+
+      <div style="padding:14px 14px 8px;">
+        <div class="panel-title" style="margin-bottom:10px;">Capabilities</div>
+        <div class="cap-item"><span class="cap-icon">🧠</span><span class="cap-name">DOM Control</span><span class="cap-badge on">ON</span></div>
+        <div class="cap-item"><span class="cap-icon">🔐</span><span class="cap-name">Vault Access</span><span class="cap-badge on">ON</span></div>
+        <div class="cap-item"><span class="cap-icon">📋</span><span class="cap-name">Audit Log</span><span class="cap-badge on">ON</span></div>
+        <div class="cap-item"><span class="cap-icon">🏖</span><span class="cap-name">Sandbox</span><span class="cap-badge on">ON</span></div>
+        <div class="cap-item"><span class="cap-icon">🌐</span><span class="cap-name">Network</span><span class="cap-badge on">ON</span></div>
+        <div class="cap-item"><span class="cap-icon">📸</span><span class="cap-name">Screenshot</span><span class="cap-badge off">OFF</span></div>
+      </div>
+
+      <div class="vault-section">
+        <div class="vault-title">🔐 Vault</div>
+        <div class="vault-item"><span class="vi-icon">👤</span><span class="vi-name">demo@kitsune.ai</span><span class="vi-status">token</span></div>
+        <div class="vault-item"><span class="vi-icon">💳</span><span class="vi-name">•••• 4242</span><span class="vi-status">locked</span></div>
+        <div class="vault-item"><span class="vi-icon">🏠</span><span class="vi-name">Home address</span><span class="vi-status">token</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── HIL GATE ── -->
+<div class="hil-overlay" id="hil-overlay">
+  <div class="hil-card">
+    <div class="hil-top">
+      <div class="hil-badge">⚠ Approval Required</div>
+      <div class="hil-title">Agent wants to complete a payment</div>
+      <div class="hil-sub">Review the action below before it executes.</div>
+    </div>
+    <div class="hil-action">
+      <div class="hil-action-label">Proposed Action</div>
+      <div class="hil-action-row"><span class="key">Action</span><span class="val">Book flight ticket</span></div>
+      <div class="hil-action-row"><span class="key">Flight</span><span class="val">EZY 1234 — LHR → BER</span></div>
+      <div class="hil-action-row"><span class="key">Date</span><span class="val">Tue 12 Mar 2025 · 08:30</span></div>
+      <div class="hil-action-row"><span class="key">Passenger</span><span class="val">Demo User · Seat 14C</span></div>
+      <div class="hil-action-row"><span class="key">Total</span><span class="val price">€194.00</span></div>
+      <div class="hil-action-row"><span class="key">Credentials</span><span class="val" style="color:var(--green)">Vault token · never exposed</span></div>
+    </div>
+    <div class="hil-timer">
+      <span>30s</span>
+      <div class="hil-timer-bar"><div class="hil-timer-fill" id="hil-timer-fill"></div></div>
+      <span id="hil-countdown">30</span>
+    </div>
+    <div class="hil-btns">
+      <button class="hil-confirm" id="hil-confirm">Confirm & Book →</button>
+      <button class="hil-cancel"  id="hil-cancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── SUCCESS TOAST ── -->
+<div class="toast" id="toast">
+  <span class="toast-icon">✅</span>
+  <span>Flight booked · Order #KITSUNE-001 · Confirmation sent to vault</span>
+</div>
+
+<script>
+// ── State ──
+let blocked = 0, referer = 0;
+let agentRunning = false;
+let hilTimer = null;
+let hilCountdown = 30;
+
+// ── Helpers ──
+function log(msg, cls='info', delay=0) {
+  setTimeout(() => {
+    const el = document.createElement('div');
+    el.className = 'log-entry ' + cls;
+    el.textContent = msg;
+    const scroll = document.getElementById('log-scroll');
+    scroll.appendChild(el);
+    scroll.scrollTop = scroll.scrollHeight;
+  }, delay);
+}
+
+function setStatus(running) {
+  const dot = document.getElementById('status-dot');
+  dot.style.background = running ? 'var(--green)' : 'var(--text2)';
+  dot.style.boxShadow = running ? '0 0 8px var(--green)' : 'none';
+  dot.style.animation = running ? 'pulse 2s ease infinite' : 'none';
+}
+
+function setAgentStatus(id, status) {
+  const el = document.getElementById(id + '-status');
+  if (!el) return;
+  el.className = 'agent-status ' + status;
+  el.textContent = status;
+}
+
+function setCard(id, active) {
+  const el = document.getElementById('card-' + id);
+  if (!el) return;
+  el.classList.toggle('active', active);
+}
+
+function addBlocker() {
+  blocked++;
+  document.getElementById('privacy-pill').textContent = `🛡 ${blocked} blocked`;
+  document.getElementById('tracker-count').textContent = `${blocked} blocked`;
+  document.getElementById('tracker-count').className = 'stat-val ok';
+  document.getElementById('pr-blocked').textContent = blocked;
+}
+
+function moveCursor(x, y, cb) {
+  const cur = document.getElementById('agent-cursor');
+  cur.style.opacity = '1';
+  cur.style.left = x + 'px';
+  cur.style.top  = y + 'px';
+  setTimeout(() => { if(cb) cb(); }, 450);
+}
+
+function hideCursor() {
+  document.getElementById('agent-cursor').style.opacity = '0';
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  if (msg) t.querySelector('span:last-child').textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 4000);
+}
+
+function showHil() {
+  const overlay = document.getElementById('hil-overlay');
+  overlay.classList.add('visible');
+  hilCountdown = 30;
+  document.getElementById('hil-countdown').textContent = hilCountdown;
+  // Reset timer animation
+  const fill = document.getElementById('hil-timer-fill');
+  fill.style.animation = 'none';
+  fill.offsetHeight; // reflow
+  fill.style.animation = 'timer-drain 30s linear forwards';
+
+  hilTimer = setInterval(() => {
+    hilCountdown--;
+    document.getElementById('hil-countdown').textContent = hilCountdown;
+    if (hilCountdown <= 0) {
+      clearInterval(hilTimer);
+      closeHil();
+      log('⚠ HIL timeout — action cancelled', 'warn');
+    }
+  }, 1000);
+}
+
+function closeHil() {
+  clearInterval(hilTimer);
+  document.getElementById('hil-overlay').classList.remove('visible');
+}
+
+// ── Demo flow ──
+function runDemo() {
+  if (agentRunning) return;
+  agentRunning = true;
+  setStatus(true);
+  const logScroll = document.getElementById('log-scroll');
+  logScroll.innerHTML = '';
+
+  const cmd = document.getElementById('cmd-input').value || 'book cheapest flight to Berlin next week';
+
+  log(`▸ agent run "${cmd}"`, 'cmd', 0);
+  log('↳ Initializing agent runtime…', 'info', 300);
+
+  // Block trackers
+  setTimeout(() => { addBlocker(); log('🚫 Blocked: doubleclick.net', 'block', 0); }, 700);
+  setTimeout(() => { addBlocker(); log('🚫 Blocked: google-analytics.com', 'block', 0); }, 1100);
+  setTimeout(() => { addBlocker(); referer++; document.getElementById('pr-referer').textContent = referer; log('✂ Referer stripped → skyscanner.com', 'info', 0); }, 1500);
+
+  // PriceTracker
+  setTimeout(() => {
+    setCard('price', true); setAgentStatus('price', 'running');
+    log('↳ PriceTracker: loading 3 booking engines in parallel…', 'info', 0);
+  }, 1800);
+  setTimeout(() => { addBlocker(); log('🚫 Blocked: facebook-pixel.com', 'block', 0); }, 2200);
+  setTimeout(() => { log('↳ Parsed 47 results — comparing fares', 'info', 0); }, 2800);
+  setTimeout(() => {
+    log('✓ Cheapest: Tue 12 Mar — €194 — easyJet EZY 1234', 'ok', 0);
+    document.getElementById('flight-best').style.boxShadow = '0 0 0 2px var(--amber), 0 0 20px rgba(255,122,0,.2)';
+    setAgentStatus('price', 'done'); setCard('price', false);
+  }, 3400);
+
+  // Move cursor to best flight
+  setTimeout(() => {
+    const rect = document.getElementById('flight-best').getBoundingClientRect();
+    const centerRect = document.getElementById('center').getBoundingClientRect();
+    moveCursor(rect.left - centerRect.left + rect.width/2, rect.top - centerRect.top + rect.height/2);
+  }, 3800);
+
+  // FormFillAgent
+  setTimeout(() => {
+    setCard('form', true); setAgentStatus('form', 'running');
+    log('↳ FormFillAgent: reading vault for credentials…', 'info', 0);
+    log('  ↳ vault returns opaque token — raw credentials never exposed', 'ok', 0);
+    hideCursor();
+  }, 4400);
+
+  // HIL Gate fires
+  setTimeout(() => {
+    log('⚑ HIL GATE — awaiting human approval…', 'warn', 0);
+    log('  action: book_flight · total: €194 · seat: 14C', 'warn', 0);
+    showHil();
+    document.getElementById('budget-fill').style.width = '34%';
+    document.getElementById('budget-num').textContent = '34 / 100 actions';
+  }, 5200);
+}
+
+// HIL confirm
+document.getElementById('hil-confirm').addEventListener('click', () => {
+  closeHil();
+  setAgentStatus('form', 'done'); setCard('form', false);
+  log('✓ User approved — executing…', 'ok', 0);
+  log('✓ POST /checkout → 200 OK · order #KITSUNE-001', 'ok', 200);
+  log('✓ Audit trail written to vault', 'ok', 400);
+  log('✓ Session cleared · no credentials retained', 'ok', 600);
+  setTimeout(() => {
+    showToast('✅  Flight booked · €194 · easyJet EZY 1234 · Confirmation → vault');
+    setStatus(false);
+    agentRunning = false;
+    document.getElementById('priv-panel').classList.add('visible');
+    document.getElementById('budget-fill').style.width = '35%';
+    document.getElementById('budget-num').textContent = '35 / 100 actions';
+  }, 800);
+});
+
+document.getElementById('hil-cancel').addEventListener('click', () => {
+  closeHil();
+  log('✕ User cancelled — action aborted', 'warn', 0);
+  setStatus(false); agentRunning = false;
+});
+
+// Run button
+document.getElementById('run-btn').addEventListener('click', runDemo);
+document.getElementById('cmd-input').addEventListener('keydown', e => { if(e.key==='Enter') runDemo(); });
+
+// Kick off automatically after 1s for demo feel
+setTimeout(runDemo, 1000);
+</script>
+</body>
+</html>

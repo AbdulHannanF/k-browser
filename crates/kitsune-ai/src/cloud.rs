@@ -10,7 +10,6 @@
 //! - Only network errors and 5xx responses are retried (not 429).
 
 use async_trait::async_trait;
-use chrono::Utc;
 use keyring::Entry;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -19,7 +18,7 @@ use tracing::{debug, info, warn};
 
 use crate::error::{AiError, AiResult};
 use crate::quota::{QuotaStatus, QuotaTracker};
-use crate::request::{AiRequest, AiResponse, TaskType};
+use crate::request::{AiRequest, AiResponse};
 use crate::{AiBackend, BackendType};
 use kitsune_agent::BudgetTracker;
 

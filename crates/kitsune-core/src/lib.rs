@@ -13,7 +13,6 @@ pub mod broker;
 pub mod engine;
 pub mod tab;
 pub mod config;
-pub mod pipeline;
 pub mod navigation;
 
 pub use broker::{ProcessManager, ProcessStatus, BrokerEvent};

@@ -234,7 +234,7 @@ impl TuningPipeline {
         let examples_snapshot = self.examples.clone();
         let config = self.config.clone();
         let adapter_version = self.adapter_version + 1;
-        let adapter_dir = self.adapter_dir.clone();
+        let _adapter_dir = self.adapter_dir.clone();
 
         let result = tokio::task::spawn_blocking(move || {
             // ARCHITECTURE: Replace with actual candle LoRA training:

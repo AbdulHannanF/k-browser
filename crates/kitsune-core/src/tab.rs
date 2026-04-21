@@ -22,13 +22,6 @@ pub struct Tab {
     pub favicon_color: Option<[u8; 3]>,
     /// Fingerprint exposure score for this tab's origin.
     pub fingerprint_score: f32,
-    /// The JobObject sandbox wrapping this tab's renderer process.
-    #[cfg(target_os = "windows")]
-    #[serde(skip)]
-    pub sandbox: Option<std::sync::Arc<kitsune_sandbox::JobObjectSandbox>>,
-    /// The PID of the renderer process.
-    #[serde(skip)]
-    pub renderer_pid: Option<u32>,
     /// Navigation history.
     #[serde(skip)]
     pub history: NavigationHistory,
@@ -59,9 +52,6 @@ impl Tab {
             active: true,
             favicon_color: None,
             fingerprint_score: 0.0,
-            #[cfg(target_os = "windows")]
-            sandbox: None,
-            renderer_pid: None,
             history: NavigationHistory::new(),
         }
     }
@@ -71,7 +61,7 @@ impl Tab {
         self.url = Some(url.to_string());
         self.state = TabState::Loading;
         self.is_loading = true;
-        
+
         let hash = url.bytes().fold(0u32, |acc, b| acc.wrapping_add(b as u32));
         self.favicon_color = Some([
             ((hash >> 16) & 0xFF) as u8,

@@ -2,7 +2,7 @@
 ///
 /// Built in Rust. Grounded in trust. Never leaks.
 
-use kitsune_ui::app::KitsuneApp;
+use kitsune_ui::app::KitsuneBrowser;
 use tracing_subscriber::EnvFilter;
 
 fn main() -> eframe::Result<()> {
@@ -34,6 +34,6 @@ fn main() -> eframe::Result<()> {
     eframe::run_native(
         "KitsuneEngine",
         options,
-        Box::new(|cc| Ok(Box::new(KitsuneApp::new(cc)))),
+        Box::new(|cc| Ok(Box::new(KitsuneBrowser::new(cc)))),
     )
 }

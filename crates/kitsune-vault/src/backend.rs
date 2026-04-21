@@ -92,6 +92,11 @@ impl VaultBackend {
 
         Ok(token)
     }
+
+    pub async fn request_access(&self, _field_id: &str) -> VaultResult<TokenHandle> {
+        // Placeholder implementation
+        Ok(TokenHandle::new())
+    }
 }
 
 #[cfg(test)]

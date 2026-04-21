@@ -20,6 +20,8 @@ chrono = { workspace = true }
 url = { workspace = true }
 keyring = "3"
 dirs = { workspace = true }
+raw-window-handle = "0.6"
+anyhow = "1"
 image = { workspace = true }
 
 kitsune-core = { path = "../kitsune-core" }
@@ -29,10 +31,7 @@ kitsune-agent-builder = { path = "../kitsune-agent-builder" }
 kitsune-hil = { path = "../kitsune-hil" }
 kitsune-net = { path = "../kitsune-net" }
 kitsune-ipc = { path = "../kitsune-ipc" }
-kitsune-render = { path = "../kitsune-render" }
 kitsune-ai = { path = "../kitsune-ai" }
-kitsune-layout = { path = "../kitsune-layout" }
-kitsune-js = { path = "../kitsune-js" }
 
 [[bin]]
 name = "kitsune"

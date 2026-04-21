@@ -1,11 +1,13 @@
-/// KitsuneEngine — the core engine orchestrator.
-
-use kitsune_agent::AgentRuntime;
-use kitsune_ipc::IpcBus;
-use kitsune_net::KitsuneHttpClient;
-
+// Page rendering delegated to WebView2 via wry
 use std::sync::Arc;
 use tracing::info;
+use tokio::sync::mpsc;
+
+use kitsune_agent::{AgentRuntime, executor::WebViewCommand};
+use kitsune_ipc::IpcBus;
+use kitsune_net::KitsuneHttpClient;
+use kitsune_vault::backend::VaultBackend;
+use kitsune_hil::gate::HilGate;
 
 use crate::broker::ProcessManager;
 
@@ -38,7 +40,16 @@ impl KitsuneEngine {
 
         let ipc_bus = Arc::new(IpcBus::new());
         let http_client = Arc::new(KitsuneHttpClient::new());
-        let agent_runtime = AgentRuntime::new();
+
+        // Create a channel for webview commands
+        let (webview_tx, _webview_rx) = mpsc::channel::<WebViewCommand>(100);
+
+        // Create placeholder instances for Vault and HIL
+        let vault = Arc::new(VaultBackend::new("password", &[0; 32]).unwrap());
+        let (hil_gate, _hil_rx) = HilGate::new(100);
+        let hil_gate = Arc::new(hil_gate);
+
+        let agent_runtime = AgentRuntime::new(webview_tx, vault, hil_gate);
         let process_manager = ProcessManager::new();
 
         Self {
@@ -102,25 +113,7 @@ impl KitsuneEngine {
     /// Open a new tab.
     pub fn new_tab(&mut self) -> usize {
         let id = self.tabs.len();
-        let mut tab = super::tab::Tab::new(id, "New Tab".to_string());
-
-        #[cfg(target_os = "windows")]
-        {
-            use std::process::Command;
-            if let Ok(sandbox) = kitsune_sandbox::JobObjectSandbox::new(&format!("kitsune-renderer-{}", id)) {
-                let _ = sandbox.configure();
-                // Spawn a child process loop (dummy for now) to simulate the renderer process
-                if let Ok(child) = Command::new(std::env::current_exe().unwrap_or_default())
-                    .arg("--renderer")
-                    .arg(id.to_string())
-                    .spawn()
-                {
-                    let _ = sandbox.assign_process(child.id());
-                    tab.renderer_pid = Some(child.id());
-                }
-                tab.sandbox = Some(std::sync::Arc::new(sandbox));
-            }
-        }
+        let tab = super::tab::Tab::new(id, "New Tab".to_string());
 
         self.tabs.push(tab);
         info!(tab_id = id, "New tab opened");

@@ -23,12 +23,7 @@ kitsune-ipc = { path = "../kitsune-ipc" }
 kitsune-vault = { path = "../kitsune-vault" }
 kitsune-hil = { path = "../kitsune-hil" }
 kitsune-net = { path = "../kitsune-net" }
-kitsune-html = { path = "../kitsune-html" }
-kitsune-css = { path = "../kitsune-css" }
-kitsune-layout = { path = "../kitsune-layout" }
-kitsune-render = { path = "../kitsune-render" }
 kitsune-agent = { path = "../kitsune-agent" }
-kitsune-js = { path = "../kitsune-js" }
 kitsune-sandbox = { path = "../kitsune-sandbox" }
 kitsune-cloud-mock = { path = "../kitsune-cloud-mock" }
 url = { workspace = true }

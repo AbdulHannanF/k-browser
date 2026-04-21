@@ -4,7 +4,6 @@
 //! `TaskType::SensitiveForm` NEVER go to cloud, enforced here at the
 //! type level — not via configuration or a flag.
 
-use async_trait::async_trait;
 use std::sync::Arc;
 use tracing::{debug, info, warn};
 
@@ -12,7 +11,7 @@ use crate::cloud::KitsuneCloudBackend;
 use crate::error::{AiError, AiResult};
 use crate::local::LocalAiBackend;
 use crate::request::{AiRequest, AiResponse, TaskType};
-use crate::{AiBackend, BackendType};
+use crate::AiBackend;
 use kitsune_agent::BudgetTracker;
 
 // ─── RoutingPolicy ────────────────────────────────────────────────────────────

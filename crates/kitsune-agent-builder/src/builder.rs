@@ -1,6 +1,6 @@
 /// Agent builder — creates and modifies agent specs.
 
-use crate::{AgentBuilderState, BuilderValidationError, ErrorSeverity};
+use crate::AgentBuilderState;
 use kitsune_agent::spec::*;
 use serde_json;
 

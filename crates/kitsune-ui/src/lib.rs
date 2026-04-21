@@ -7,7 +7,5 @@
 // 5. Onboarding Flow — 3-screen introduction for new users
 
 pub mod app;
-pub mod panels;
 pub mod theme;
 pub mod hil_window;
-pub mod widgets;

@@ -1,10 +1,15 @@
-
 use crate::spec::{AgentSpec, AgentAction};
 use crate::dom_access::DomAccessor;
 use crate::error::AgentResult;
 use std::sync::Arc;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, mpsc};
 use tracing::{info, error};
+
+pub enum WebViewCommand {
+    EvalJs(String),
+    EvalJsWithCallback(String, mpsc::Sender<String>),
+    Navigate(String),
+}
 
 /// Executes a fixed, scripted sequence of actions from an agent spec.
 pub struct ScriptedExecutor {
@@ -48,8 +53,8 @@ impl ScriptedExecutor {
                 let links = accessor.query_links(selector).await?;
                 info!("Queried links: {:?}", links);
             }
-            AgentAction::FillField { selector, vault_key, .. } => {
-                accessor.fill_field(selector, vault_key).await?;
+            AgentAction::FillField { selector, value, .. } => {
+                accessor.fill_field(selector, value).await?;
             }
             AgentAction::Click { selector, .. } => {
                 accessor.click_element(selector).await?;

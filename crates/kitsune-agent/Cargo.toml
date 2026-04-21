@@ -22,9 +22,6 @@ parking_lot = { workspace = true }
 kitsune-vault = { path = "../kitsune-vault" }
 kitsune-hil = { path = "../kitsune-hil" }
 kitsune-ipc = { path = "../kitsune-ipc" }
-kitsune-html = { path = "../kitsune-html" }
-kitsune-layout = { path = "../kitsune-layout" }
-kitsune-css = { path = "../kitsune-css" }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }

@@ -12,9 +12,8 @@
 
 use async_trait::async_trait;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use std::time::Instant;
-use tracing::{debug, info, warn};
+use tracing::{debug, warn};
 
 use crate::error::{AiError, AiResult};
 use crate::request::{AiRequest, AiResponse};

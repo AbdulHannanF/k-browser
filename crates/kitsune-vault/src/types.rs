@@ -202,6 +202,10 @@ impl TokenHandle {
     pub fn is_valid(&self) -> bool {
         !self.consumed && chrono::Utc::now() < self.expires_at
     }
+
+    pub fn display_value(&self) -> String {
+        self.id.to_string()
+    }
 }
 
 impl Default for TokenHandle {

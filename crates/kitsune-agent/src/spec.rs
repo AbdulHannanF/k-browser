@@ -77,7 +77,7 @@ pub enum AgentAction {
     Navigate { url: String },
     QueryText { selector: String, purpose: String },
     QueryLinks { selector: String, purpose: String },
-    FillField { selector: String, vault_key: String, purpose: String },
+    FillField { selector: String, value: String, purpose: String },
     Click { selector: String, purpose: String },
     Wait { ms: u64 },
 }

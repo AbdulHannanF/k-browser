@@ -6,6 +6,11 @@ use crate::spec::{AgentSpec, AgentTool, DomainPolicy, AgentId, AgentGoal, AgentC
 use crate::tools::*;
 use std::sync::Arc;
 use tracing::{info, warn};
+use tokio::sync::mpsc;
+use crate::executor::WebViewCommand;
+use url::Url;
+use kitsune_vault::VaultBackend;
+use kitsune_hil::HilGate;
 
 /// Context provided to an executing agent.
 pub struct AgentContext {
@@ -16,6 +21,9 @@ pub struct AgentContext {
 pub struct AgentRuntime {
     /// Currently loaded agents.
     agents: Vec<AgentInstance>,
+    webview_tx: mpsc::Sender<WebViewCommand>,
+    vault: Arc<VaultBackend>,
+    hil_gate: Arc<HilGate>,
 }
 
 /// A running agent instance.
@@ -79,10 +87,17 @@ pub struct AgentActionLog {
 
 impl AgentRuntime {
     /// Create a new agent runtime.
-    pub fn new() -> Self {
+    pub fn new(
+        webview_tx: mpsc::Sender<WebViewCommand>,
+        vault: Arc<VaultBackend>,
+        hil_gate: Arc<HilGate>,
+    ) -> Self {
         info!("Initializing agent runtime");
         Self {
             agents: Vec::new(),
+            webview_tx,
+            vault,
+            hil_gate,
         }
     }
 
@@ -94,12 +109,19 @@ impl AgentRuntime {
             spec.constraints.max_actions_per_session,
         ));
 
+        let dom_accessor = Arc::new(crate::dom_access::DomAccessor::new(
+            self.vault.clone(),
+            self.hil_gate.clone(),
+            Url::parse("about:blank").unwrap(),
+            self.webview_tx.clone(),
+        ));
+
         let instance = AgentInstance {
             spec: spec.clone(),
             budget,
             status: AgentStatus::Idle,
             action_log: Vec::new(),
-            context: None,
+            context: Some(AgentContext { dom: dom_accessor }),
         };
 
         let index = self.agents.len();
@@ -168,12 +190,6 @@ impl AgentRuntime {
             }
             DomainPolicy::AllowAll => Ok(()),
         }
-    }
-}
-
-impl Default for AgentRuntime {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
