@@ -1,32 +1,22 @@
-use eframe::egui;
+use eframe::egui::{self, Color32};
 
 pub struct KitsuneTheme;
 
 impl KitsuneTheme {
-    pub const ORANGE: egui::Color32 = egui::Color32::from_rgb(255, 119, 0);
-    pub const ORANGE_HOVER: egui::Color32 = egui::Color32::from_rgb(255, 155, 50);
-    pub const BG_DARK: egui::Color32 = egui::Color32::from_rgb(15, 15, 18);
-    pub const BG_PANEL: egui::Color32 = egui::Color32::from_rgb(22, 22, 28);
-    pub const BG_CARD: egui::Color32 = egui::Color32::from_rgb(30, 30, 38);
-    pub const TEXT_PRIMARY: egui::Color32 = egui::Color32::from_rgb(240, 240, 245);
-    pub const TEXT_MUTED: egui::Color32 = egui::Color32::from_rgb(140, 140, 155);
-    pub const GREEN_SAFE: egui::Color32 = egui::Color32::from_rgb(74, 222, 128);
-    pub const RED_BLOCKED: egui::Color32 = egui::Color32::from_rgb(248, 113, 113);
-    pub const BLUE_ACTING: egui::Color32 = egui::Color32::from_rgb(74, 158, 255);
-
-    // Constants that were in the old theme file
-    pub const BG_BASE: egui::Color32 = egui::Color32::from_rgb(28, 27, 34);
-    pub const BG_SURFACE: egui::Color32 = egui::Color32::from_rgb(43, 42, 51);
-    pub const BG_ELEVATED: egui::Color32 = egui::Color32::from_rgb(66, 65, 77);
-    pub const BORDER: egui::Color32 = egui::Color32::from_rgb(82, 82, 94);
-    pub const BORDER_BRIGHT: egui::Color32 = egui::Color32::from_rgb(143, 143, 157);
-    pub const ACCENT: egui::Color32 = egui::Color32::from_rgb(0, 97, 224);
-    pub const SUCCESS: egui::Color32 = egui::Color32::from_rgb(46, 204, 113);
-    pub const WARNING: egui::Color32 = egui::Color32::from_rgb(241, 196, 15);
-    pub const ERROR: egui::Color32 = egui::Color32::from_rgb(231, 76, 60);
-    pub const AGENT_READING: egui::Color32 = Self::WARNING;
-    pub const AGENT_ACTING: egui::Color32 = Self::ACCENT;
-
+    pub const BG:         Color32 = Color32::from_rgb(8,   8,  13);
+    pub const BG_PANEL:   Color32 = Color32::from_rgb(15,  15, 24);
+    pub const BG_CARD:    Color32 = Color32::from_rgb(20,  20, 31);
+    pub const BG3:        Color32 = Color32::from_rgb(28,  28, 44);
+    pub const BG4:        Color32 = Color32::from_rgb(34,  34, 53);
+    pub const AMBER:      Color32 = Color32::from_rgb(255, 122,  0);
+    pub const AMBER2:     Color32 = Color32::from_rgb(255, 179, 71);
+    pub const GREEN_SAFE: Color32 = Color32::from_rgb(57,  232, 143);
+    pub const RED_BLOCKED:Color32 = Color32::from_rgb(255,  77, 106);
+    pub const BLUE:       Color32 = Color32::from_rgb(74,  158, 255);
+    pub const TEXT_PRIMARY:Color32 = Color32::from_rgb(242, 242, 250);
+    pub const TEXT_MUTED: Color32 = Color32::from_rgb(184, 184, 208);
+    pub const TEXT2:      Color32 = Color32::from_rgb(106, 106, 138);
+    pub const BORDER:     Color32 = Color32::from_rgba_premultiplied(255,255,255,15);
 
     pub fn apply(ctx: &egui::Context) {
         let mut style = egui::Style {
@@ -34,13 +24,12 @@ impl KitsuneTheme {
             ..Default::default()
         };
         style.visuals.panel_fill = Self::BG_PANEL;
-        style.visuals.window_fill = Self::BG_DARK;
-        style.visuals.selection.bg_fill = Self::ORANGE;
-        style.visuals.hyperlink_color = Self::ORANGE;
-        style.visuals.widgets.active.bg_fill = Self::ORANGE;
-        style.visuals.widgets.hovered.bg_fill = Self::ORANGE_HOVER;
-        style.visuals.widgets.hovered.bg_stroke.color = Self::ORANGE;
-        // Rounded everything
+        style.visuals.window_fill = Self::BG;
+        style.visuals.selection.bg_fill = Self::AMBER;
+        style.visuals.hyperlink_color = Self::AMBER;
+        style.visuals.widgets.active.bg_fill = Self::AMBER;
+        style.visuals.widgets.hovered.bg_fill = Self::AMBER2;
+        style.visuals.widgets.hovered.bg_stroke.color = Self::AMBER;
         style.visuals.window_rounding = egui::Rounding::same(8.0);
         style.visuals.widgets.noninteractive.rounding = egui::Rounding::same(6.0);
         style.visuals.widgets.inactive.rounding = egui::Rounding::same(6.0);

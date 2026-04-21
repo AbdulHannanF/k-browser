@@ -8,4 +8,6 @@
 
 pub mod app;
 pub mod theme;
-pub mod hil_window;
+pub mod chrome;
+pub mod panels;
+pub mod dialogs;

@@ -32,6 +32,7 @@ kitsune-hil = { path = "../kitsune-hil" }
 kitsune-net = { path = "../kitsune-net" }
 kitsune-ipc = { path = "../kitsune-ipc" }
 kitsune-ai = { path = "../kitsune-ai" }
+kitsune-cef = { path = "../kitsune-cef" }
 
 [[bin]]
 name = "kitsune"

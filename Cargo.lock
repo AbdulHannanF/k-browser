@@ -3244,6 +3244,9 @@ dependencies = [
 [[package]]
 name = "kitsune-cef"
 version = "0.1.0"
+dependencies = [
+ "thiserror 2.0.18",
+]
 
 [[package]]
 name = "kitsune-cloud-mock"
@@ -3363,6 +3366,7 @@ dependencies = [
  "kitsune-agent",
  "kitsune-agent-builder",
  "kitsune-ai",
+ "kitsune-cef",
  "kitsune-core",
  "kitsune-hil",
  "kitsune-ipc",
