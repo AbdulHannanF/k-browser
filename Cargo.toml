@@ -11,7 +11,8 @@ members = [
     "crates/kitsune-sandbox",
     "crates/kitsune-ui",
     "crates/kitsune-ai",
-    "crates/kitsune-cloud-mock", "crates/kitsune-cef",
+    "crates/kitsune-cloud-mock",
+    "crates/kitsune-cef",
 ]
 
 [workspace.package]

@@ -1,6 +1,5 @@
 use eframe::egui;
 use crate::theme::KitsuneTheme;
-use raw_window_handle::HasWindowHandle;
 
 pub struct KitsuneBrowser {
     address_bar: String,
@@ -51,7 +50,7 @@ impl KitsuneBrowser {
 }
 
 impl eframe::App for KitsuneBrowser {
-    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         // Initialize webview on first frame (HWND is available now)
         // Initialize CEF on first frame (HWND is available now)
         // if self.cef.is_none() {
@@ -70,7 +69,7 @@ impl eframe::App for KitsuneBrowser {
         self.render_top_bar(ctx);
 
         // Central panel — just measure its rect, the webview fills it
-        let central_rect = egui::CentralPanel::default()
+        let _central_rect = egui::CentralPanel::default()
             .show(ctx, |_ui| {}) // empty — webview sits here
             .response
             .rect;
