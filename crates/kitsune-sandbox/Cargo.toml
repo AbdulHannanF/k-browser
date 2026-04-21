@@ -1,0 +1,21 @@
+[package]
+name = "kitsune-sandbox"
+description = "Process sandbox implementation for KitsuneEngine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# seccomp-bpf support would go here
+
+[target.'cfg(target_os = "macos")'.dependencies]
+# seatbelt support would go here
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-sys = { workspace = true }
+windows = { version = "0.57", features = ["Win32_System_JobObjects", "Win32_Foundation", "Win32_Security", "Win32_System_Threading"] }

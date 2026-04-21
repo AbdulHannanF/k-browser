@@ -1,0 +1,20 @@
+[package]
+name = "kitsune-ipc"
+description = "Inter-process communication between privileged and unprivileged processes"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+postcard = { version = "1", features = ["alloc", "use-std"] }
+interprocess = { version = "2", features = ["tokio"] }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+bytes = { workspace = true }
+chrono = { workspace = true }
+dashmap = { workspace = true }
+parking_lot = { workspace = true }

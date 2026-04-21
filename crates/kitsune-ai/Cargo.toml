@@ -1,0 +1,46 @@
+[package]
+name = "kitsune-ai"
+description = "KitsuneEngine AI power layer — cloud and local model routing"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[features]
+default = ["cloud"]
+cloud = []
+local-model = [
+    "dep:candle-core",
+    "dep:candle-transformers",
+    "dep:candle-nn",
+    "dep:hf-hub",
+    "dep:tokenizers",
+]
+
+[dependencies]
+# From workspace
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+dirs = { workspace = true }
+keyring = { workspace = true }
+reqwest = { workspace = true }
+parking_lot = { workspace = true }
+async-trait = { workspace = true }
+
+# Internal
+kitsune-agent = { path = "../kitsune-agent" }
+
+# Local model inference (optional — feature-gated, Pro tier only)
+candle-core = { version = "0.7", optional = true }
+candle-transformers = { version = "0.7", optional = true }
+candle-nn = { version = "0.7", optional = true }
+hf-hub = { version = "0.3", optional = true }
+tokenizers = { version = "0.19", optional = true }
+
+[dev-dependencies]
+tokio = { workspace = true }

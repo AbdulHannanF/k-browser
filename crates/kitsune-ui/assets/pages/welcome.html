@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Welcome to KitsuneEngine</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #0d0f14;
+            color: #e2e8f0;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        /* Layout Grid */
+        .container {
+            width: 100%;
+            max-width: 1200px;
+            padding: 40px 20px;
+            display: grid;
+            grid-template-columns: 1fr;
+            row-gap: 48px;
+        }
+
+        /* Hero */
+        .hero {
+            text-align: center;
+            display: grid;
+            row-gap: 16px;
+        }
+        .hero h1 {
+            font-size: 3rem;
+            margin: 0;
+            color: #7c6af7;
+        }
+        .hero p {
+            font-size: 1.25rem;
+            color: #94a3b8;
+            margin: 0;
+        }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 24px;
+        }
+        .stat-card {
+            background-color: #1e293b;
+            border-radius: 12px;
+            padding: 24px;
+            text-align: center;
+            border: 1px solid #334155;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .stat-card:hover {
+            transform: scale(1.05);
+            box-shadow: 0 4px 12px rgba(124, 106, 247, 0.2);
+        }
+        .stat-card h3 {
+            margin: 0 0 8px 0;
+            font-size: 1rem;
+            color: #94a3b8;
+            font-weight: 500;
+        }
+        .stat-card p {
+            margin: 0;
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: #7c6af7;
+        }
+
+        /* Quick Start Grid */
+        .quick-start {
+            display: grid;
+            row-gap: 24px;
+        }
+        .quick-start h2 {
+            font-size: 1.5rem;
+            margin: 0;
+            border-bottom: 2px solid #334155;
+            padding-bottom: 12px;
+        }
+        .agent-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 24px;
+        }
+        .agent-card {
+            background-color: #0f172a;
+            border-radius: 12px;
+            padding: 24px;
+            border: 1px solid #334155;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+            display: grid;
+            row-gap: 12px;
+        }
+        .agent-card:hover {
+            background-color: #1e293b;
+            border-color: #7c6af7;
+        }
+        .agent-card h3 {
+            margin: 0;
+            color: #e2e8f0;
+        }
+        .agent-card p {
+            margin: 0;
+            color: #94a3b8;
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="hero">
+            <h1>🦊 KitsuneEngine</h1>
+            <p>The browser that works for you</p>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <h3>Trackers Blocked</h3>
+                <p id="stat-trackers">0</p>
+            </div>
+            <div class="stat-card">
+                <h3>Referers Stripped</h3>
+                <p id="stat-referers">0</p>
+            </div>
+            <div class="stat-card">
+                <h3>JS Eval Blocked</h3>
+                <p id="stat-js">0</p>
+            </div>
+        </div>
+
+        <div class="quick-start">
+            <h2>Active Agent Templates</h2>
+            <div class="agent-grid">
+                <div class="agent-card">
+                    <h3>🔍 ResearchAgent</h3>
+                    <p>Scours the web securely for detailed information on any topic without exposing your traits.</p>
+                </div>
+                <div class="agent-card">
+                    <h3>📉 PriceTracker</h3>
+                    <p>Monitors product pages globally for drops without submitting forms or leaking cookies.</p>
+                </div>
+                <div class="agent-card">
+                    <h3>📝 FormFillAgent</h3>
+                    <p>Uses Zero-Exposure Vault to securely fill out fields natively, avoiding external interception.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

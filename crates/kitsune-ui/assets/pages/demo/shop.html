@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Kitsune Demo Shop</title>
+    <!-- Privacy Demo Trackers (Intercepted by network client) -->
+    <!-- <script src="https://tracker.example.com/analytic.js"></script> -->
+    <!-- <script src="https://adnetwork.example.com/pixel.js"></script> -->
+    <!-- <script src="https://telemetry.example.com/collect.js"></script> -->
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #0d0f14;
+            color: #e2e8f0;
+            font-family: system-ui, sans-serif;
+            display: flex;
+            justify-content: center;
+        }
+        .store {
+            width: 100%;
+            max-width: 1000px;
+            padding: 40px 20px;
+            display: grid;
+            row-gap: 32px;
+        }
+        h1 {
+            color: #7c6af7;
+            text-align: center;
+            margin: 0;
+        }
+        .products {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 24px;
+        }
+        .product-card {
+            background-color: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 20px;
+            display: grid;
+            row-gap: 16px;
+            text-align: center;
+        }
+        .product-card h3 {
+            margin: 0;
+            color: #f8fafc;
+        }
+        .product-card .price {
+            font-size: 1.5rem;
+            color: #10b981;
+            font-weight: bold;
+            margin: 0;
+        }
+        button {
+            background-color: #7c6af7;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            padding: 12px;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+        }
+        button:hover {
+            background-color: #6366f1;
+        }
+        .fake-img {
+            width: 100%;
+            height: 150px;
+            background-color: #334155;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #94a3b8;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="store">
+        <h1>Kitsune Demo Shop</h1>
+        <div class="products">
+            <div class="product-card">
+                <div class="fake-img">Earbuds</div>
+                <h3>Wireless Earbuds</h3>
+                <p class="price">$49.99</p>
+                <button id="add-cart-btn-1">Add to Cart</button>
+            </div>
+            <div class="product-card">
+                <div class="fake-img">Keyboard</div>
+                <h3>Mechanical Keyboard</h3>
+                <p class="price">$129.99</p>
+                <button id="add-cart-btn-2">Add to Cart</button>
+            </div>
+            <div class="product-card">
+                <div class="fake-img">USB Hub</div>
+                <h3>USB Hub</h3>
+                <p class="price">$29.99</p>
+                <button id="add-cart-btn-3">Add to Cart</button>
+            </div>
+            <div class="product-card">
+                <div class="fake-img">Lamp</div>
+                <h3>Desk Lamp</h3>
+                <p class="price">$39.99</p>
+                <button id="add-cart-btn-4">Add to Cart</button>
+            </div>
+            <div class="product-card">
+                <div class="fake-img">Webcam</div>
+                <h3>Webcam</h3>
+                <p class="price">$79.99</p>
+                <button id="add-cart-btn-5">Add to Cart</button>
+            </div>
+            <div class="product-card">
+                <div class="fake-img">Mouse Pad</div>
+                <h3>Mouse Pad</h3>
+                <p class="price">$19.99</p>
+                <button id="add-cart-btn-6">Add to Cart</button>
+            </div>
+            <div class="product-card">
+                <div class="fake-img">Cable Org</div>
+                <h3>Cable Organizer</h3>
+                <p class="price">$14.99</p>
+                <button id="add-cart-btn-7">Add to Cart</button>
+            </div>
+            <div class="product-card">
+                <div class="fake-img">Stand</div>
+                <h3>Monitor Stand</h3>
+                <p class="price">$59.99</p>
+                <button id="add-cart-btn-8">Add to Cart</button>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

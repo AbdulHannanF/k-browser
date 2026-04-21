@@ -1,0 +1,31 @@
+[package]
+name = "kitsune-vault"
+description = "Zero-exposure privacy vault — the crown jewel of KitsuneEngine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+zeroize = { workspace = true }
+argon2 = { workspace = true }
+rand = { workspace = true }
+sha2 = { workspace = true }
+parking_lot = { workspace = true }
+dashmap = { workspace = true }
+url = { workspace = true }
+rusqlite = { workspace = true }
+dirs = { workspace = true }
+age = "0.10.0"
+hex = "0.4.3"
+hmac = { version = "0.12.1", features = ["std"] }
+keyring = "3"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }

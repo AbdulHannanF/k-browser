@@ -1,0 +1,44 @@
+[package]
+name = "kitsune-ui"
+description = "Native UI shell for KitsuneEngine (egui-based)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+tokio = { workspace = true }
+egui = { workspace = true }
+eframe = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+url = { workspace = true }
+keyring = "3"
+dirs = { workspace = true }
+image = { workspace = true }
+
+kitsune-core = { path = "../kitsune-core" }
+kitsune-vault = { path = "../kitsune-vault" }
+kitsune-agent = { path = "../kitsune-agent" }
+kitsune-agent-builder = { path = "../kitsune-agent-builder" }
+kitsune-hil = { path = "../kitsune-hil" }
+kitsune-net = { path = "../kitsune-net" }
+kitsune-ipc = { path = "../kitsune-ipc" }
+kitsune-render = { path = "../kitsune-render" }
+kitsune-ai = { path = "../kitsune-ai" }
+kitsune-layout = { path = "../kitsune-layout" }
+kitsune-js = { path = "../kitsune-js" }
+
+[[bin]]
+name = "kitsune"
+path = "src/main.rs"
+
+[package.metadata.winres]
+OriginalFilename = "kitsune.exe"
+FileDescription = "KitsuneEngine Browser"
+LegalCopyright = "Apache 2.0"

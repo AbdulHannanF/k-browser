@@ -1,0 +1,101 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/kitsune-core",
+    "crates/kitsune-html",
+    "crates/kitsune-css",
+    "crates/kitsune-layout",
+    "crates/kitsune-render",
+    "crates/kitsune-net",
+    "crates/kitsune-js",
+    "crates/kitsune-vault",
+    "crates/kitsune-agent",
+    "crates/kitsune-agent-builder",
+    "crates/kitsune-hil",
+    "crates/kitsune-ipc",
+    "crates/kitsune-sandbox",
+    "crates/kitsune-ui",
+    "crates/kitsune-ai",
+    "crates/kitsune-cloud-mock",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.75"
+license = "Apache-2.0"
+repository = "https://github.com/kitsune-engine/kitsune-engine"
+authors = ["Kitsune Team <team@kitsune.sh>"]
+
+[workspace.dependencies]
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+futures = "0.3"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Error handling
+thiserror = "2"
+anyhow = "1"
+
+# Logging / Tracing
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+argon2 = "0.5"
+rand = "0.8"
+zeroize = { version = "1", features = ["derive"] }
+keyring = "3"
+sha2 = "0.10"
+
+# Networking
+reqwest = { version = "0.12", features = ["json", "rustls-tls", "http2"] }
+rustls = "0.23"
+url = { version = "2", features = ["serde"] }
+hyper = { version = "1", features = ["full"] }
+http = "1"
+
+# HTML/CSS parsing
+html5ever = "0.38"
+markup5ever = "0.38"
+markup5ever_rcdom = "0.38"
+cssparser = "0.34"
+selectors = "0.26"
+
+# Layout
+taffy = "0.5"
+
+# GPU Rendering
+wgpu = "23"
+bytemuck = { version = "1", features = ["derive"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp"] }
+
+# UI
+egui = "0.30"
+eframe = { version = "0.30", default-features = false, features = ["default", "glow"] }
+
+# Data structures
+enumset = { version = "1", features = ["serde"] }
+semver = { version = "1", features = ["serde"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+bytes = "1"
+
+# General
+parking_lot = "0.12"
+dashmap = "6"
+dirs = "5"
+async-trait = "0.1"
+rusqlite = { version = "0.31", features = ["bundled"] }
+
+# JavaScript
+v8 = "0.92"
+
+# Windows Sandbox
+windows-sys = { version = "0.52", features = [
+    "Win32_System_JobObjects",
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_System_Threading"
+] }

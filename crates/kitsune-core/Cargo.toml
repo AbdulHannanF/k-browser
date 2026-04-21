@@ -1,0 +1,34 @@
+[package]
+name = "kitsune-core"
+description = "Engine orchestration and event loop for KitsuneEngine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+tokio = { workspace = true }
+futures = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+parking_lot = { workspace = true }
+dashmap = { workspace = true }
+anyhow = { workspace = true }
+
+kitsune-ipc = { path = "../kitsune-ipc" }
+kitsune-vault = { path = "../kitsune-vault" }
+kitsune-hil = { path = "../kitsune-hil" }
+kitsune-net = { path = "../kitsune-net" }
+kitsune-html = { path = "../kitsune-html" }
+kitsune-css = { path = "../kitsune-css" }
+kitsune-layout = { path = "../kitsune-layout" }
+kitsune-render = { path = "../kitsune-render" }
+kitsune-agent = { path = "../kitsune-agent" }
+kitsune-js = { path = "../kitsune-js" }
+kitsune-sandbox = { path = "../kitsune-sandbox" }
+kitsune-cloud-mock = { path = "../kitsune-cloud-mock" }
+url = { workspace = true }
