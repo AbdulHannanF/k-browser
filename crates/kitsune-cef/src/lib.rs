@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::num::NonZeroIsize;
 
 use raw_window_handle::{HasWindowHandle, RawWindowHandle, Win32WindowHandle, WindowHandle};
-use wry::{Rect, WebView, WebViewBuilder};
+use wry::{Rect, WebView, WebViewBuilder, WebViewBuilderExtWindows};
 
 /// A rectangle with a position and size.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -113,10 +113,10 @@ pub enum RequestAction {
 impl From<CefRect> for Rect {
     fn from(value: CefRect) -> Self {
         Self {
-            x: value.x as f64,
-            y: value.y as f64,
-            width: value.width as f64,
-            height: value.height as f64,
+            x: value.x as i32,
+            y: value.y as i32,
+            width: value.width as u32,
+            height: value.height as u32,
         }
     }
 }
@@ -158,10 +158,10 @@ mod tests {
         };
 
         let converted: Rect = rect.into();
-        assert_eq!(converted.x, 12.0);
-        assert_eq!(converted.y, 24.0);
-        assert_eq!(converted.width, 640.0);
-        assert_eq!(converted.height, 480.0);
+        assert_eq!(converted.x, 12);
+        assert_eq!(converted.y, 24);
+        assert_eq!(converted.width, 640);
+        assert_eq!(converted.height, 480);
     }
 
     #[test]
