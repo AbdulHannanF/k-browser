@@ -160,8 +160,10 @@ impl eframe::App for KitsuneBrowser {
         top_bar(ctx, self);
 
         // Central panel — egui placeholder while CEF is absent
+        // CRITICAL FIX: Make background transparent when CEF is active so the native webview 
+        // isn't obscured by egui's default panel fill.
         let central_rect = egui::CentralPanel::default()
-            .frame(egui::Frame::none().fill(KitsuneTheme::BG))
+            .frame(egui::Frame::none().fill(if self.cef.is_some() { egui::Color32::TRANSPARENT } else { KitsuneTheme::BG }))
             .show(ctx, |ui| {
                 if self.cef.is_none() {
                     ui.centered_and_justified(|ui| {
@@ -208,6 +210,7 @@ impl eframe::App for KitsuneBrowser {
             }
         }
 
+        // Keep webview bounds in sync with egui layout changes (window resize, panel toggle, etc.)
         if let Some(cef) = &self.cef {
             let bounds = CefRect {
                 x: central_rect.min.x as i32,
@@ -216,10 +219,8 @@ impl eframe::App for KitsuneBrowser {
                 height: central_rect.height().max(1.0) as u32,
             };
 
-            if self.cef_bounds != Some(bounds) {
-                cef.set_bounds(bounds);
-                self.cef_bounds = Some(bounds);
-            }
+            cef.set_bounds(bounds);
+            self.cef_bounds = Some(bounds);
         }
 
         // Flush pending navigation
