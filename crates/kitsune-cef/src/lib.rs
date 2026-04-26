@@ -8,9 +8,6 @@ use std::num::NonZeroIsize;
 use raw_window_handle::{HasWindowHandle, RawWindowHandle, Win32WindowHandle, WindowHandle};
 use wry::{Rect, WebView, WebViewBuilder};
 
-#[cfg(target_os = "windows")]
-use wry::WebViewBuilderExtWindows;
-
 /// A rectangle with a position and size.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CefRect {
@@ -116,10 +113,10 @@ pub enum RequestAction {
 impl From<CefRect> for Rect {
     fn from(value: CefRect) -> Self {
         Self {
-            x: value.x,
-            y: value.y,
-            width: value.width,
-            height: value.height,
+            x: value.x as f64,
+            y: value.y as f64,
+            width: value.width as f64,
+            height: value.height as f64,
         }
     }
 }
@@ -161,10 +158,10 @@ mod tests {
         };
 
         let converted: Rect = rect.into();
-        assert_eq!(converted.x, 12);
-        assert_eq!(converted.y, 24);
-        assert_eq!(converted.width, 640);
-        assert_eq!(converted.height, 480);
+        assert_eq!(converted.x, 12.0);
+        assert_eq!(converted.y, 24.0);
+        assert_eq!(converted.width, 640.0);
+        assert_eq!(converted.height, 480.0);
     }
 
     #[test]
