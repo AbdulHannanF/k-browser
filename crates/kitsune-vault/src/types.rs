@@ -2,7 +2,6 @@
 ///
 /// All sensitive types implement Zeroize so they are scrubbed from memory
 /// when dropped. Debug implementations use [REDACTED] for sensitive fields.
-
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use zeroize::Zeroize;

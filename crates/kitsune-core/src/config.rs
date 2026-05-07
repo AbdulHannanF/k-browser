@@ -1,5 +1,4 @@
 /// Engine configuration.
-
 use serde::{Deserialize, Serialize};
 
 /// KitsuneEngine configuration.

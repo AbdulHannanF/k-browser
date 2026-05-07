@@ -17,13 +17,16 @@ pub fn default_vault_path() -> PathBuf {
 /// Open or create the vault database at the given path.
 pub fn open_db(path: &Path) -> VaultResult<Connection> {
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| VaultError::StorageError(format!("Cannot create vault directory: {}", e)))?;
+        std::fs::create_dir_all(parent).map_err(|e| {
+            VaultError::StorageError(format!("Cannot create vault directory: {}", e))
+        })?;
     }
 
     let conn = Connection::open_with_flags(
         path,
-        OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+        OpenFlags::SQLITE_OPEN_READ_WRITE
+            | OpenFlags::SQLITE_OPEN_CREATE
+            | OpenFlags::SQLITE_OPEN_NO_MUTEX,
     )
     .map_err(|e| VaultError::StorageError(format!("Cannot open vault database: {}", e)))?;
 
@@ -89,23 +92,26 @@ pub fn retrieve_entry(
     category: &str,
     label: &str,
 ) -> VaultResult<Option<VaultEntry>> {
-    let mut stmt = conn.prepare(
-        "SELECT id, category, label, origin_pseudonym, encrypted_value, created_at, updated_at
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, category, label, origin_pseudonym, encrypted_value, created_at, updated_at
          FROM vault_entries WHERE origin_pseudonym = ?1 AND category = ?2 AND label = ?3",
-    )
-    .map_err(|e| VaultError::StorageError(format!("Prepare failed: {}", e)))?;
+        )
+        .map_err(|e| VaultError::StorageError(format!("Prepare failed: {}", e)))?;
 
-    let entry = stmt.query_row(params![origin_pseudonym, category, label], |row| {
-        Ok(VaultEntry {
-            id: row.get::<_, String>(0)?.parse().unwrap(),
-            category: row.get::<_, String>(1)?.parse().unwrap(),
-            label: row.get(2)?,
-            origin_pseudonym: row.get(3)?,
-            encrypted_value: row.get(4)?,
-            created_at: row.get(5)?,
-            updated_at: row.get(6)?,
+    let entry = stmt
+        .query_row(params![origin_pseudonym, category, label], |row| {
+            Ok(VaultEntry {
+                id: row.get::<_, String>(0)?.parse().unwrap(),
+                category: row.get::<_, String>(1)?.parse().unwrap(),
+                label: row.get(2)?,
+                origin_pseudonym: row.get(3)?,
+                encrypted_value: row.get(4)?,
+                created_at: row.get(5)?,
+                updated_at: row.get(6)?,
+            })
         })
-    }).ok();
+        .ok();
 
     Ok(entry)
 }
@@ -152,7 +158,14 @@ mod tests {
         };
         store_entry(&conn, &entry).unwrap();
 
-        let retrieved = retrieve_entry(&conn, "test-origin", &VaultCategory::Password.to_string(), "test-label").unwrap().unwrap();
+        let retrieved = retrieve_entry(
+            &conn,
+            "test-origin",
+            &VaultCategory::Password.to_string(),
+            "test-label",
+        )
+        .unwrap()
+        .unwrap();
         assert_eq!(retrieved.id, entry.id);
         assert_eq!(retrieved.encrypted_value, entry.encrypted_value);
     }

@@ -1,5 +1,5 @@
-use kitsune_ai::cloud::{KitsuneCloudBackend, AuthToken, AccountStatus};
 use keyring::Entry;
+use kitsune_ai::cloud::{AccountStatus, AuthToken, KitsuneCloudBackend};
 
 const KEYRING_SERVICE: &str = "kitsune-engine";
 const KEYRING_USER: &str = "cloud-token";
@@ -26,7 +26,7 @@ async fn test_token_stored_in_keychain_not_memory() {
 #[ignore = "Flaky OS Keychain test"]
 async fn test_password_not_stored_after_auth() {
     let entry = Entry::new(KEYRING_SERVICE, KEYRING_USER).unwrap();
-    
+
     // Simulate auth token saving logic like the backend
     let dummy_token = "jwt.fake.token";
     entry.set_password(dummy_token).unwrap();
@@ -53,7 +53,7 @@ async fn test_logout_clears_keychain() {
 
 #[tokio::test]
 async fn test_account_status_parses_correctly() {
-    // If the API is live, this should parse. If we can't test it directly, 
+    // If the API is live, this should parse. If we can't test it directly,
     // we just parse a mock JSON to ensure the struct bounds are correct.
     let json = r#"{
         "tier": "free",
@@ -79,7 +79,11 @@ async fn test_quota_exhausted_not_retried() {
 
     let err = tracker.consume(1).unwrap_err();
     match err {
-        kitsune_ai::AiError::QuotaExhausted { actions_used, limit, .. } => {
+        kitsune_ai::AiError::QuotaExhausted {
+            actions_used,
+            limit,
+            ..
+        } => {
             assert_eq!(actions_used, 100);
             assert_eq!(limit, 100);
         }

@@ -1,13 +1,13 @@
-// ARCHITECTURE: kitsune-ui is the native UI shell for KitsuneEngine.
-// It uses egui for cross-platform rendering and provides:
-// 1. Privacy Dashboard — vault status, agent activity, fingerprint scores
-// 2. Agent Shelf — list of agents with status indicators
-// 3. HIL Confirmation Sheet — modal confirmation dialogs
-// 4. Vault Manager — view/manage vault entries
-// 5. Onboarding Flow — 3-screen introduction for new users
+// ARCHITECTURE: kitsune-ui is the native desktop host for KitsuneEngine.
+// It boots a minimal egui frame with a split-panel layout:
+//   - Top: Chrome bar (logo, tabs, navigation, URL bar, privacy pill)
+//   - Left: Agent workspace panel (command input, agent cards, log, budget)
+//   - Right: Session info panel (status, capabilities, vault)
+//   - Center: WebView2 surface rendering real web pages
+//   - Overlay: HIL confirmation dialog when an agent needs approval
 
 pub mod app;
-pub mod theme;
 pub mod chrome;
-pub mod panels;
 pub mod dialogs;
+pub mod panels;
+pub mod theme;

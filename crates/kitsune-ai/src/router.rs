@@ -115,9 +115,7 @@ impl AiRouter {
                 "Task requires local backend (security invariant)"
             );
             return match &self.local {
-                Some(local) if local.is_available() => {
-                    local.complete(request, budget).await
-                }
+                Some(local) if local.is_available() => local.complete(request, budget).await,
                 _ => {
                     warn!(
                         task = task.description(),
@@ -132,10 +130,17 @@ impl AiRouter {
         if self.policy.prefers_local(task) {
             if let Some(local) = &self.local {
                 if local.is_available() {
-                    debug!(task = task.description(), "Trying local backend (preferred)");
+                    debug!(
+                        task = task.description(),
+                        "Trying local backend (preferred)"
+                    );
                     match local.complete(request.clone(), budget).await {
                         Ok(resp) => {
-                            info!(task = task.description(), latency_ms = resp.latency_ms, "Local backend succeeded");
+                            info!(
+                                task = task.description(),
+                                latency_ms = resp.latency_ms,
+                                "Local backend succeeded"
+                            );
                             return Ok(resp);
                         }
                         Err(AiError::LocalTimeout { ms }) => {

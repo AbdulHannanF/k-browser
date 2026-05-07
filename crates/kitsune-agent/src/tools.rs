@@ -2,7 +2,6 @@
 ///
 /// SECURITY: All vault operations produce tokens, never raw values.
 /// All actions that could incur cost must call log_cost and check_budget.
-
 use crate::error::{AgentError, AgentResult};
 use crate::spec::MoneyAmount;
 use serde::{Deserialize, Serialize};

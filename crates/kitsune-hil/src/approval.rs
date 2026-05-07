@@ -7,7 +7,6 @@
 ///
 /// These properties are enforced at the type system level. An agent cannot
 /// bypass HIL by reusing or forging approval tokens.
-
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;

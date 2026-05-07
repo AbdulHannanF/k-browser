@@ -1,54 +1,39 @@
 use std::time::Instant;
-use kitsune_html::parser;
-use kitsune_css::style_engine::StyleEngine;
-use kitsune_layout::engine::{LayoutEngine, Viewport};
 
-fn generate_large_html() -> String {
-    let mut s = String::from("<html><body>");
-    for i in 0..10_00 {
-        s.push_str(&format!("<div class='item-{}'><span>Item {}</span></div>", i, i));
+use kitsune_core::{config::EngineConfig, navigation::NavigationHistory, KitsuneEngine};
+use url::Url;
+
+#[test]
+fn navigation_history_pushes_large_sequences_quickly() {
+    let mut history = NavigationHistory::new();
+    let start = Instant::now();
+
+    for i in 0..1_000 {
+        history.push(
+            Url::parse(&format!("https://example.com/page/{i}")).unwrap(),
+            format!("Page {i}"),
+        );
     }
-    s.push_str("</body></html>");
-    s
+
+    assert!(history.current().is_some());
+    assert!(
+        start.elapsed().as_millis() < 1_000,
+        "history push path regressed past 1s in debug"
+    );
 }
 
 #[test]
-fn test_html_parse_under_50ms() {
-    let html = generate_large_html();
+fn opening_many_tabs_remains_linear_and_stable() {
+    let mut engine = KitsuneEngine::new(EngineConfig::default());
     let start = Instant::now();
-    let dom = parser::parse_html(&html).unwrap();
-    let elapsed = start.elapsed().as_millis();
-    assert!(dom.node_count() > 100);
-    // Relaxed for debug cargo test environments
-    assert!(elapsed <= 1000, "Parsing took {}ms", elapsed);
-}
 
-#[test]
-fn test_css_cascade_under_10ms() {
-    let html = "<html><body><div>Test</div></body></html>";
-    let dom = parser::parse_html(html).unwrap();
-    let mut engine = StyleEngine::new();
-    
-    // Warmup
-    let _ = engine.compute_styles(&dom, Vec::new());
-    
-    let start = Instant::now();
-    let _styled = engine.compute_styles(&dom, Vec::new());
-    let elapsed = start.elapsed().as_millis();
-    
-    assert!(elapsed <= 50, "CSS cascade took {}ms", elapsed);
-}
+    for _ in 0..200 {
+        engine.new_tab();
+    }
 
-#[test]
-fn test_layout_under_20ms() {
-    let html = "<html><body><div>Test</div></body></html>";
-    let dom = parser::parse_html(html).unwrap();
-    let mut engine = StyleEngine::new();
-    let styled = engine.compute_styles(&dom, Vec::new());
-    
-    let start = Instant::now();
-    let _layout = LayoutEngine::layout(&styled, Viewport::new(1920.0, 1080.0));
-    let elapsed = start.elapsed().as_millis();
-    
-    assert!(elapsed <= 50, "Layout took {}ms", elapsed);
+    assert_eq!(engine.tabs.len(), 200);
+    assert!(
+        start.elapsed().as_millis() < 1_000,
+        "tab allocation regressed past 1s in debug"
+    );
 }

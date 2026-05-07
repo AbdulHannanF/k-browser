@@ -3,10 +3,9 @@
 /// The bus runs in the broker process and routes messages between all
 /// registered processes. It enforces capability checks and logs all
 /// cross-process communication for audit purposes.
-
 use crate::channel::IpcChannel;
 use crate::error::{IpcError, IpcResult};
-use crate::message::{IpcMessage, ProcessCapability, ProcessId, PrivilegeLevel};
+use crate::message::{IpcMessage, PrivilegeLevel, ProcessCapability, ProcessId};
 use dashmap::DashMap;
 use std::collections::HashSet;
 use std::sync::Arc;

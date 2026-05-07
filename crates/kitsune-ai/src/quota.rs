@@ -78,7 +78,10 @@ impl QuotaTracker {
             Ok(json) => match serde_json::from_str::<QuotaTracker>(&json) {
                 Ok(mut tracker) => {
                     tracker.reset_if_due();
-                    debug!("Loaded quota cache: {}/{:?} used", tracker.used, tracker.limit);
+                    debug!(
+                        "Loaded quota cache: {}/{:?} used",
+                        tracker.used, tracker.limit
+                    );
                     tracker
                 }
                 Err(e) => {
@@ -163,10 +166,7 @@ impl QuotaTracker {
     /// Reset the quota if the reset date has passed.
     pub fn reset_if_due(&mut self) {
         if Utc::now() >= self.resets_at {
-            info!(
-                used = self.used,
-                "Monthly quota reset"
-            );
+            info!(used = self.used, "Monthly quota reset");
             self.used = 0;
             self.resets_at = next_month_reset();
             self.persist();

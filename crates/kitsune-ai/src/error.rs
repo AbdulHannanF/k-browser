@@ -29,7 +29,9 @@ pub enum AiError {
     LocalTimeout { ms: u64 },
 
     /// Task type requires local but local is unavailable.
-    #[error("task type {task:?} must use local model (security invariant) but local is unavailable")]
+    #[error(
+        "task type {task:?} must use local model (security invariant) but local is unavailable"
+    )]
     RequiresLocal { task: TaskType },
 
     /// PII scrubbing pipeline failed.

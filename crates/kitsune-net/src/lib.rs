@@ -7,11 +7,11 @@
 // - Certificate pinning support
 
 pub mod client;
-pub mod privacy;
 pub mod error;
+pub mod privacy;
 
-pub use error::{NetError, NetResult};
 pub use client::*;
+pub use error::{NetError, NetResult};
 pub use privacy::*;
 
 use serde::{Deserialize, Serialize};

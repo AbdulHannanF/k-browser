@@ -220,11 +220,7 @@ impl KitsuneCloudBackend {
             .build()
             .map_err(|e| AiError::NetworkError(e.to_string()))?;
 
-        let resp = http
-            .get(ACCOUNT_ENDPOINT)
-            .bearer_auth(token)
-            .send()
-            .await?;
+        let resp = http.get(ACCOUNT_ENDPOINT).bearer_auth(token).send().await?;
 
         if !resp.status().is_success() {
             return Err(AiError::CloudError {
@@ -313,7 +309,12 @@ impl KitsuneCloudBackend {
                                 message: "server error after retries".to_string(),
                             });
                         }
-                        warn!(attempt, status = status.as_u16(), delay_ms, "5xx error, retrying");
+                        warn!(
+                            attempt,
+                            status = status.as_u16(),
+                            delay_ms,
+                            "5xx error, retrying"
+                        );
                         tokio::time::sleep(Duration::from_millis(delay_ms)).await;
                         delay_ms = (delay_ms * BACKOFF_FACTOR).min(MAX_DELAY_MS);
                         continue;
@@ -404,9 +405,17 @@ impl AiBackend for KitsuneCloudBackend {
 /// values never enter the context string at all (they are always OpaqueTokens).
 pub fn scrub_pii(input: &str) -> String {
     // Email addresses
-    let s = regex_replace(input, r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}", "[EMAIL]");
+    let s = regex_replace(
+        input,
+        r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}",
+        "[EMAIL]",
+    );
     // Phone numbers (various formats)
-    let s = regex_replace(&s, r"\b(\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b", "[PHONE]");
+    let s = regex_replace(
+        &s,
+        r"\b(\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b",
+        "[PHONE]",
+    );
     // Credit card numbers (13–19 digits with optional separators)
     let s = regex_replace(&s, r"\b(?:\d{4}[-\s]?){3}\d{1,4}\b", "[CARD]");
     // SSN patterns (NNN-NN-NNNN or NNNNNNNNN)

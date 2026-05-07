@@ -14,20 +14,20 @@
 // INVARIANT: If secure enclave key storage fails, the vault REFUSES to
 // initialize rather than falling back to unencrypted storage.
 
-pub mod backend;
-pub mod types;
-pub mod policy;
 pub mod access;
 pub mod audit;
+pub mod backend;
 pub mod crypto;
-pub mod site_isolation;
-pub mod error;
 pub mod db;
+pub mod error;
+pub mod policy;
+pub mod site_isolation;
+pub mod types;
 
-pub use error::{VaultError, VaultResult};
-pub use types::*;
-pub use policy::*;
 pub use access::*;
 pub use audit::*;
 pub use backend::VaultBackend;
+pub use error::{VaultError, VaultResult};
+pub use policy::*;
 pub use site_isolation::SiteIsolationMap;
+pub use types::*;

@@ -1,11 +1,10 @@
 /// HTTP client — privacy-first networking for KitsuneEngine.
-
 use crate::error::{NetError, NetResult};
 use crate::privacy;
 use crate::{HttpResponse, PrivacyAwareRequest, PrivacyReport, RequestPrivacySettings};
-use tracing::{debug, info, warn};
-use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+use tracing::{debug, info, warn};
 
 use std::path::PathBuf;
 
@@ -70,9 +69,16 @@ impl PartitionedCookieJar {
 
     pub fn get_cookies(&self, url: &url::Url, top_level_origin: &str) -> Option<String> {
         let inner = self.inner.lock().unwrap();
-        let key = (url.origin().ascii_serialization(), top_level_origin.to_string());
+        let key = (
+            url.origin().ascii_serialization(),
+            top_level_origin.to_string(),
+        );
         if let Some(store) = inner.get(&key) {
-            let cookies = store.matches(url).into_iter().map(|c| format!("{}={}", c.name(), c.value())).collect::<Vec<_>>();
+            let cookies = store
+                .matches(url)
+                .into_iter()
+                .map(|c| format!("{}={}", c.name(), c.value()))
+                .collect::<Vec<_>>();
             if !cookies.is_empty() {
                 return Some(cookies.join("; "));
             }
@@ -82,8 +88,13 @@ impl PartitionedCookieJar {
 
     pub fn store_cookie(&self, url: &url::Url, top_level_origin: &str, cookie_str: &str) {
         let mut inner = self.inner.lock().unwrap();
-        let key = (url.origin().ascii_serialization(), top_level_origin.to_string());
-        let store = inner.entry(key).or_insert_with(|| cookie_store::CookieStore::default());
+        let key = (
+            url.origin().ascii_serialization(),
+            top_level_origin.to_string(),
+        );
+        let store = inner
+            .entry(key)
+            .or_insert_with(|| cookie_store::CookieStore::default());
         let _ = store.parse(cookie_str, url);
     }
 }
@@ -96,7 +107,7 @@ impl KitsuneHttpClient {
             .redirect(reqwest::redirect::Policy::none())
             .build()
             .unwrap_or_default();
-            
+
         let cache_dir = dirs::data_dir().map(|d| {
             let p = d.join("kitsune").join("cache");
             let _ = std::fs::create_dir_all(&p);
@@ -136,10 +147,14 @@ impl KitsuneHttpClient {
 
             // Merge privacy report
             if let Some(ref mut pr) = final_privacy_report {
-                pr.stripped_headers.extend(privacy_report.stripped_headers.clone());
-                pr.injected_headers.extend(privacy_report.injected_headers.clone());
-                pr.blocked_trackers.extend(privacy_report.blocked_trackers.clone());
-                pr.fingerprinting_vectors.extend(privacy_report.fingerprinting_vectors.clone());
+                pr.stripped_headers
+                    .extend(privacy_report.stripped_headers.clone());
+                pr.injected_headers
+                    .extend(privacy_report.injected_headers.clone());
+                pr.blocked_trackers
+                    .extend(privacy_report.blocked_trackers.clone());
+                pr.fingerprinting_vectors
+                    .extend(privacy_report.fingerprinting_vectors.clone());
             } else {
                 final_privacy_report = Some(privacy_report.clone());
             }
@@ -156,13 +171,23 @@ impl KitsuneHttpClient {
             }
 
             // Set privacy-safe User-Agent
-            if !request.headers.iter().any(|(n, _)| n.to_lowercase() == "user-agent") {
-                request.headers.push(("User-Agent".to_string(), privacy::privacy_user_agent()));
+            if !request
+                .headers
+                .iter()
+                .any(|(n, _)| n.to_lowercase() == "user-agent")
+            {
+                request
+                    .headers
+                    .push(("User-Agent".to_string(), privacy::privacy_user_agent()));
             }
 
             // Inject cookies
-            if let Some(cookie_header) = self.cookie_jar.get_cookies(&current_url, &top_level_origin) {
-                request.headers.retain(|(n, _)| !n.eq_ignore_ascii_case("cookie"));
+            if let Some(cookie_header) =
+                self.cookie_jar.get_cookies(&current_url, &top_level_origin)
+            {
+                request
+                    .headers
+                    .retain(|(n, _)| !n.eq_ignore_ascii_case("cookie"));
                 request.headers.push(("Cookie".to_string(), cookie_header));
             }
 
@@ -182,12 +207,20 @@ impl KitsuneHttpClient {
                     if let Ok(meta) = std::fs::metadata(&cache_path) {
                         if let Ok(mod_time) = meta.modified() {
                             if let Ok(cached_json) = std::fs::read_to_string(&cache_path) {
-                                if let Ok(mut cached_resp) = serde_json::from_str::<HttpResponse>(&cached_json) {
+                                if let Ok(mut cached_resp) =
+                                    serde_json::from_str::<HttpResponse>(&cached_json)
+                                {
                                     let mut max_age = 0;
                                     for (k, v) in &cached_resp.headers {
                                         if k.eq_ignore_ascii_case("cache-control") {
                                             if let Some(pos) = v.find("max-age=") {
-                                                if let Ok(age) = v[pos + 8..].split(',').next().unwrap_or("0").trim().parse::<u64>() {
+                                                if let Ok(age) = v[pos + 8..]
+                                                    .split(',')
+                                                    .next()
+                                                    .unwrap_or("0")
+                                                    .trim()
+                                                    .parse::<u64>()
+                                                {
                                                     max_age = age;
                                                 }
                                             }
@@ -225,7 +258,9 @@ impl KitsuneHttpClient {
                 crate::HttpMethod::Delete => self.inner.delete(request.url.as_str()),
                 crate::HttpMethod::Patch => self.inner.patch(request.url.as_str()),
                 crate::HttpMethod::Head => self.inner.head(request.url.as_str()),
-                crate::HttpMethod::Options => self.inner.request(reqwest::Method::OPTIONS, request.url.as_str()),
+                crate::HttpMethod::Options => self
+                    .inner
+                    .request(reqwest::Method::OPTIONS, request.url.as_str()),
             };
 
             // Apply headers
@@ -239,7 +274,12 @@ impl KitsuneHttpClient {
             }
 
             // Send the request
-            let response = match tokio::time::timeout(std::time::Duration::from_secs(10), req_builder.send()).await {
+            let response = match tokio::time::timeout(
+                std::time::Duration::from_secs(10),
+                req_builder.send(),
+            )
+            .await
+            {
                 Ok(Ok(res)) => res,
                 Ok(Err(e)) => {
                     warn!(error = %e, "HTTP request failed");
@@ -253,7 +293,7 @@ impl KitsuneHttpClient {
                     } else {
                         b"<html><body><h1>Connection Error</h1></body></html>".to_vec()
                     };
-                    
+
                     return Ok(HttpResponse {
                         status: 500,
                         headers: vec![("Content-Type".to_string(), "text/html".to_string())],
@@ -263,7 +303,7 @@ impl KitsuneHttpClient {
                         is_internal: false,
                         privacy_report: final_privacy_report.unwrap_or(privacy_report),
                     });
-                },
+                }
                 Err(_) => {
                     // Timeout
                     return Ok(HttpResponse {
@@ -284,7 +324,8 @@ impl KitsuneHttpClient {
             for (k, v) in response.headers() {
                 if k.as_str().eq_ignore_ascii_case("set-cookie") {
                     if let Ok(s) = v.to_str() {
-                        self.cookie_jar.store_cookie(&current_url, &top_level_origin, s);
+                        self.cookie_jar
+                            .store_cookie(&current_url, &top_level_origin, s);
                     }
                 }
             }
@@ -296,17 +337,22 @@ impl KitsuneHttpClient {
                         if let Ok(next_url) = current_url.join(loc_str) {
                             redirect_count += 1;
                             if redirect_count > 10 {
-                                return Err(NetError::ConnectionFailed("Too many redirects".to_string()));
+                                return Err(NetError::ConnectionFailed(
+                                    "Too many redirects".to_string(),
+                                ));
                             }
-                            
+
                             let cross_origin = current_url.origin() != next_url.origin();
                             current_url = next_url;
-                            
+
                             // Strip sensitive headers on cross-origin redirect
                             if cross_origin {
                                 request.headers.retain(|(n, _)| {
                                     let lowercase = n.to_lowercase();
-                                    if lowercase == "authorization" || lowercase == "cookie" || lowercase == "proxy-authorization" {
+                                    if lowercase == "authorization"
+                                        || lowercase == "cookie"
+                                        || lowercase == "proxy-authorization"
+                                    {
                                         if let Some(ref mut pr) = final_privacy_report {
                                             pr.stripped_headers.push(n.clone());
                                         }
@@ -322,8 +368,8 @@ impl KitsuneHttpClient {
                 }
             }
 
-            let final_url = url::Url::parse(response.url().as_str())
-                .unwrap_or_else(|_| current_url.clone());
+            let final_url =
+                url::Url::parse(response.url().as_str()).unwrap_or_else(|_| current_url.clone());
             let is_secure = final_url.scheme() == "https";
 
             // Collect response headers
@@ -340,9 +386,13 @@ impl KitsuneHttpClient {
                 b"<html><body><h1>Server error. Try again later.</h1></body></html>".to_vec()
             } else {
                 // Read body bytes
-                response.bytes().await.map_err(|e| {
-                    NetError::ConnectionFailed(format!("Failed to read response body: {}", e))
-                })?.to_vec()
+                response
+                    .bytes()
+                    .await
+                    .map_err(|e| {
+                        NetError::ConnectionFailed(format!("Failed to read response body: {}", e))
+                    })?
+                    .to_vec()
             };
 
             info!(
@@ -366,7 +416,10 @@ impl KitsuneHttpClient {
             if let (Some(dir), Some(key)) = (&self.cache_dir, &cache_key) {
                 let mut cacheable = false;
                 for (k, v) in &resp.headers {
-                    if k.eq_ignore_ascii_case("cache-control") && v.contains("max-age=") && !v.contains("max-age=0") {
+                    if k.eq_ignore_ascii_case("cache-control")
+                        && v.contains("max-age=")
+                        && !v.contains("max-age=0")
+                    {
                         cacheable = true;
                         break;
                     }
@@ -378,7 +431,7 @@ impl KitsuneHttpClient {
                     }
                 }
             }
-            
+
             return Ok(resp);
         }
     }
@@ -427,7 +480,10 @@ mod tests {
     #[tokio::test]
     async fn test_internal_url_serves_welcome() {
         let client = KitsuneHttpClient::new();
-        let resp = client.get(url::Url::parse("kitsune://welcome").unwrap()).await.unwrap();
+        let resp = client
+            .get(url::Url::parse("kitsune://welcome").unwrap())
+            .await
+            .unwrap();
         assert_eq!(resp.status, 200);
         assert!(resp.is_internal);
         let body = String::from_utf8_lossy(&resp.body);
@@ -437,7 +493,10 @@ mod tests {
     #[tokio::test]
     async fn test_internal_url_serves_shop() {
         let client = KitsuneHttpClient::new();
-        let resp = client.get(url::Url::parse("kitsune://demo/shop").unwrap()).await.unwrap();
+        let resp = client
+            .get(url::Url::parse("kitsune://demo/shop").unwrap())
+            .await
+            .unwrap();
         assert_eq!(resp.status, 200);
         assert!(resp.is_internal);
         let body = String::from_utf8_lossy(&resp.body);
@@ -447,7 +506,10 @@ mod tests {
     #[tokio::test]
     async fn test_unknown_internal_url() {
         let client = KitsuneHttpClient::new();
-        let resp = client.get(url::Url::parse("kitsune://nonexistent").unwrap()).await.unwrap();
+        let resp = client
+            .get(url::Url::parse("kitsune://nonexistent").unwrap())
+            .await
+            .unwrap();
         assert_eq!(resp.status, 404);
         assert!(resp.is_internal);
     }
@@ -455,7 +517,9 @@ mod tests {
     #[tokio::test]
     async fn test_http_url_not_intercepted() {
         let client = KitsuneHttpClient::new();
-        let result = client.get(url::Url::parse("http://example.com").unwrap()).await;
+        let result = client
+            .get(url::Url::parse("http://example.com").unwrap())
+            .await;
         if let Ok(resp) = result {
             assert!(!resp.is_internal);
         }

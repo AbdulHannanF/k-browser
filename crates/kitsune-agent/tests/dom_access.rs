@@ -1,11 +1,11 @@
 use kitsune_agent::dom_access::DomAccessor;
+use kitsune_hil::HilGate;
 use kitsune_html::dom::DomTree;
 use kitsune_vault::VaultBackend;
-use kitsune_hil::HilGate;
-use url::Url;
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use std::collections::HashMap;
+use url::Url;
 
 fn build_mock_dom() -> DomTree {
     let mut tree = DomTree::new();
@@ -17,7 +17,7 @@ fn build_mock_dom() -> DomTree {
     tree.append_child(html, body);
 
     let text_node = tree.create_text("Hello KitsuneAgent");
-    
+
     let mut div_attrs = HashMap::new();
     div_attrs.insert("id".to_string(), "target-div".to_string());
     let div_node = tree.create_element_with_attrs("div", div_attrs);
@@ -62,7 +62,7 @@ fn build_mock_dom() -> DomTree {
     input_attrs.insert("id".to_string(), "password-field".to_string());
     let input_node = tree.create_element_with_attrs("input", input_attrs);
     tree.append_child(body, input_node);
-    
+
     tree
 }
 
@@ -70,7 +70,14 @@ async fn setup_accessor() -> DomAccessor {
     let dom = Arc::new(Mutex::new(build_mock_dom()));
     let vault = Arc::new(VaultBackend::new("password", &[0; 32]).unwrap());
     let hil_gate = Arc::new(HilGate::new_test_gate());
-    DomAccessor::new(dom, vault, hil_gate, Url::parse("https://kitsune.sh").unwrap(), None, None)
+    DomAccessor::new(
+        dom,
+        vault,
+        hil_gate,
+        Url::parse("https://kitsune.sh").unwrap(),
+        None,
+        None,
+    )
 }
 
 #[tokio::test]
@@ -105,13 +112,19 @@ async fn test_fill_field_injects_opaque_token_not_raw_value() {
     // Actually we'll just check it sets the value to something non-empty if the vault entry exists.
     // If not, it will return an error because it's not found. We simulate or just trust the layer.
     let res = acc.fill_field("#password-field", "non_existent");
-    assert!(res.await.is_err(), "Expected Vault to deny access to missing key");
+    assert!(
+        res.await.is_err(),
+        "Expected Vault to deny access to missing key"
+    );
 }
 
 #[tokio::test]
 async fn test_fill_field_fails_if_vault_denies_access() {
     let acc = setup_accessor().await;
-    let err = acc.fill_field("#password-field", "top_secret_key").await.unwrap_err();
+    let err = acc
+        .fill_field("#password-field", "top_secret_key")
+        .await
+        .unwrap_err();
     match err {
         kitsune_agent::AgentError::PermissionDenied { .. } => {}
         _ => panic!("Expected PermissionDenied"),
@@ -124,7 +137,10 @@ async fn test_click_element_triggers_hil_for_submit_buttons() {
     let res = acc.click_element("#my-submit").await;
     assert!(res.is_ok(), "Submit input should be clickable in test mode");
     let res2 = acc.click_element("#my-submit-btn").await;
-    assert!(res2.is_ok(), "Submit button should be clickable in test mode");
+    assert!(
+        res2.is_ok(),
+        "Submit button should be clickable in test mode"
+    );
 }
 
 #[tokio::test]
@@ -144,7 +160,7 @@ async fn test_navigate_validates_url_parsing() {
         }
         _ => panic!("Expected ExecutionError for bad url"),
     }
-    
+
     let res = acc.navigate("https://example.com").await;
     assert!(res.is_ok());
     assert_eq!(acc.get_current_url().await.unwrap(), "https://example.com/");

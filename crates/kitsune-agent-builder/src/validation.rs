@@ -1,5 +1,4 @@
 /// Agent spec validation — ensures safety invariants.
-
 use crate::{BuilderValidationError, ErrorSeverity};
 use kitsune_agent::spec::AgentSpec;
 
@@ -13,7 +12,10 @@ pub fn validate_spec(spec: &AgentSpec) -> Vec<BuilderValidationError> {
             field: "name".to_string(),
             severity: ErrorSeverity::Error,
             message: "Your assistant needs a name.".to_string(),
-            suggested_fix: Some("Give your assistant a descriptive name like 'Price Tracker' or 'Form Filler'.".to_string()),
+            suggested_fix: Some(
+                "Give your assistant a descriptive name like 'Price Tracker' or 'Form Filler'."
+                    .to_string(),
+            ),
         });
     }
 
@@ -23,7 +25,9 @@ pub fn validate_spec(spec: &AgentSpec) -> Vec<BuilderValidationError> {
             field: "description".to_string(),
             severity: ErrorSeverity::Warning,
             message: "A description helps you remember what this assistant does.".to_string(),
-            suggested_fix: Some("Describe what this assistant will do for you in plain language.".to_string()),
+            suggested_fix: Some(
+                "Describe what this assistant will do for you in plain language.".to_string(),
+            ),
         });
     }
 
@@ -49,20 +53,25 @@ pub fn validate_spec(spec: &AgentSpec) -> Vec<BuilderValidationError> {
 
     // Payment initiation requires explicit HIL
     if spec.constraints.can_initiate_payments
-        && !spec.constraints.hil_required_for.iter().any(|h| h == "all" || h == "financial")
+        && !spec
+            .constraints
+            .hil_required_for
+            .iter()
+            .any(|h| h == "all" || h == "financial")
     {
         errors.push(BuilderValidationError {
             field: "constraints".to_string(),
             severity: ErrorSeverity::Error,
-            message: "Assistants that can make payments must require your confirmation.".to_string(),
-            suggested_fix: Some("Enable 'Ask before making payments' in safety settings.".to_string()),
+            message: "Assistants that can make payments must require your confirmation."
+                .to_string(),
+            suggested_fix: Some(
+                "Enable 'Ask before making payments' in safety settings.".to_string(),
+            ),
         });
     }
 
     // Budget should be set if payments are enabled
-    if spec.constraints.can_initiate_payments
-        && spec.budget.max_cost_per_session.is_none()
-    {
+    if spec.constraints.can_initiate_payments && spec.budget.max_cost_per_session.is_none() {
         errors.push(BuilderValidationError {
             field: "budget".to_string(),
             severity: ErrorSeverity::Warning,
@@ -76,8 +85,11 @@ pub fn validate_spec(spec: &AgentSpec) -> Vec<BuilderValidationError> {
         errors.push(BuilderValidationError {
             field: "triggers".to_string(),
             severity: ErrorSeverity::Warning,
-            message: "Your assistant has no triggers — you'll need to start it manually each time.".to_string(),
-            suggested_fix: Some("Add a trigger like a URL pattern or a keyboard shortcut.".to_string()),
+            message: "Your assistant has no triggers — you'll need to start it manually each time."
+                .to_string(),
+            suggested_fix: Some(
+                "Add a trigger like a URL pattern or a keyboard shortcut.".to_string(),
+            ),
         });
     }
 

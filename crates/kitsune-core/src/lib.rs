@@ -10,16 +10,16 @@
 // - JS Engine: Heavily sandboxed. No filesystem, no direct IPC to broker.
 
 pub mod broker;
-pub mod engine;
-pub mod tab;
 pub mod config;
+pub mod engine;
 pub mod navigation;
+pub mod tab;
 
-pub use broker::{ProcessManager, ProcessStatus, BrokerEvent};
+pub use broker::{BrokerEvent, ProcessManager, ProcessStatus};
 
+pub use config::*;
 pub use engine::*;
 pub use tab::*;
-pub use config::*;
 
 /// The KitsuneEngine version.
 pub const ENGINE_VERSION: &str = env!("CARGO_PKG_VERSION");

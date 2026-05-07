@@ -1,9 +1,9 @@
-use crate::spec::{AgentSpec, AgentAction};
 use crate::dom_access::DomAccessor;
 use crate::error::AgentResult;
+use crate::spec::{AgentAction, AgentSpec};
 use std::sync::Arc;
-use tokio::sync::{Mutex, mpsc};
-use tracing::{info, error};
+use tokio::sync::{mpsc, Mutex};
+use tracing::{error, info};
 
 pub enum WebViewCommand {
     EvalJs(String),
@@ -53,7 +53,9 @@ impl ScriptedExecutor {
                 let links = accessor.query_links(selector).await?;
                 info!("Queried links: {:?}", links);
             }
-            AgentAction::FillField { selector, value, .. } => {
+            AgentAction::FillField {
+                selector, value, ..
+            } => {
                 accessor.fill_field(selector, value).await?;
             }
             AgentAction::Click { selector, .. } => {

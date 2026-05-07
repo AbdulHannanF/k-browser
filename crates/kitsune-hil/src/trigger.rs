@@ -3,7 +3,6 @@
 /// Each variant represents a class of action that requires human approval
 /// before it can be executed. The trigger class determines what information
 /// is presented to the user in the confirmation dialog.
-
 use serde::{Deserialize, Serialize};
 use url::Url;
 
@@ -158,14 +157,22 @@ impl HilTriggerClass {
     /// Get a plain-language summary of this trigger for the user.
     pub fn plain_language_summary(&self) -> String {
         match self {
-            Self::FinancialFormSubmission { institution, amount, .. } => {
+            Self::FinancialFormSubmission {
+                institution,
+                amount,
+                ..
+            } => {
                 if let Some(money) = amount {
                     format!("Send a payment of {} to {}", money.display(), institution)
                 } else {
                     format!("Submit financial information to {}", institution)
                 }
             }
-            Self::AccountCreation { service, implied_cost, .. } => {
+            Self::AccountCreation {
+                service,
+                implied_cost,
+                ..
+            } => {
                 if let Some(pricing) = implied_cost {
                     format!("Create an account on {} — {}", service, pricing.description)
                 } else {
@@ -175,20 +182,36 @@ impl HilTriggerClass {
             Self::NewAuthenticationSite { domain, .. } => {
                 format!("Sign in to {} using your saved credentials", domain)
             }
-            Self::BilledApiCall { provider, estimated_cost, action_description } => {
+            Self::BilledApiCall {
+                provider,
+                estimated_cost,
+                action_description,
+            } => {
                 if let Some(cost) = estimated_cost {
-                    format!("{} via {} (estimated cost: {})", action_description, provider, cost.display())
+                    format!(
+                        "{} via {} (estimated cost: {})",
+                        action_description,
+                        provider,
+                        cost.display()
+                    )
                 } else {
                     format!("{} via {}", action_description, provider)
                 }
             }
-            Self::CommunicationOnBehalf { channel, recipient_summary, .. } => {
+            Self::CommunicationOnBehalf {
+                channel,
+                recipient_summary,
+                ..
+            } => {
                 format!("Send a {} to {}", channel, recipient_summary)
             }
             Self::ExecutionRequest { description, .. } => {
                 format!("Download and run: {}", description)
             }
-            Self::ExternalSideEffect { description, reversible } => {
+            Self::ExternalSideEffect {
+                description,
+                reversible,
+            } => {
                 if *reversible {
                     format!("{} (can be undone)", description)
                 } else {
@@ -203,7 +226,10 @@ impl HilTriggerClass {
         matches!(
             self,
             Self::FinancialFormSubmission { .. }
-                | Self::AccountCreation { implied_cost: Some(_), .. }
+                | Self::AccountCreation {
+                    implied_cost: Some(_),
+                    ..
+                }
                 | Self::BilledApiCall { .. }
         )
     }

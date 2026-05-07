@@ -6,8 +6,8 @@
 //
 // This crate provides a unified interface that abstracts platform differences.
 
-pub mod policy;
 pub mod error;
+pub mod policy;
 
 #[cfg(target_os = "windows")]
 pub mod windows;
@@ -66,7 +66,7 @@ impl SandboxProfile {
             allow_gpu: true,
             allow_media_devices: false,
             memory_limit_bytes: 1024 * 1024 * 1024, // 1 GB
-            cpu_time_limit_seconds: 0, // Unlimited
+            cpu_time_limit_seconds: 0,              // Unlimited
         }
     }
 
@@ -185,16 +185,18 @@ fn apply_windows_sandbox(profile: &SandboxProfile) -> SandboxResult<()> {
     // Restricted Tokens remove privileges from the process token.
     info!("Applying Windows sandbox via Job Objects");
 
+    use windows_sys::Win32::Foundation::*;
     use windows_sys::Win32::System::JobObjects::*;
     use windows_sys::Win32::System::Threading::*;
-    use windows_sys::Win32::Foundation::*;
-    
+
     unsafe {
         let job = CreateJobObjectW(std::ptr::null(), std::ptr::null());
         if job == 0 {
-            return Err(SandboxError::CreationFailed("Failed to create job object".to_string()));
+            return Err(SandboxError::CreationFailed(
+                "Failed to create job object".to_string(),
+            ));
         }
-        
+
         // UI restrictions — renderer cannot create desktop windows or global atoms
         let mut ui_limits: JOBOBJECT_BASIC_UI_RESTRICTIONS = std::mem::zeroed();
         ui_limits.UIRestrictionsClass = JOB_OBJECT_UILIMIT_DESKTOP
@@ -208,9 +210,11 @@ fn apply_windows_sandbox(profile: &SandboxProfile) -> SandboxResult<()> {
             std::mem::size_of::<JOBOBJECT_BASIC_UI_RESTRICTIONS>() as u32,
         );
         if res == 0 {
-            return Err(SandboxError::CreationFailed("Failed to set UI restrictions".to_string()));
+            return Err(SandboxError::CreationFailed(
+                "Failed to set UI restrictions".to_string(),
+            ));
         }
-        
+
         // Memory limit
         if profile.memory_limit_bytes > 0 {
             let mut ext: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = std::mem::zeroed();
@@ -224,17 +228,21 @@ fn apply_windows_sandbox(profile: &SandboxProfile) -> SandboxResult<()> {
                 std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
             );
             if res == 0 {
-                return Err(SandboxError::CreationFailed("Failed to set memory limits".to_string()));
+                return Err(SandboxError::CreationFailed(
+                    "Failed to set memory limits".to_string(),
+                ));
             }
         }
-        
+
         // Assign current process to the job
         let res = AssignProcessToJobObject(job, GetCurrentProcess());
         if res == 0 {
-            return Err(SandboxError::CreationFailed("Failed to assign process to job".to_string()));
+            return Err(SandboxError::CreationFailed(
+                "Failed to assign process to job".to_string(),
+            ));
         }
     }
-    
+
     Ok(())
 }
 
@@ -262,9 +270,8 @@ mod tests {
     fn test_renderer_profile() {
         let profile = SandboxProfile::renderer();
         assert_eq!(profile.memory_limit_bytes, 1024 * 1024 * 1024);
-        
+
         let res = apply_sandbox(&profile);
         assert!(res.is_ok());
     }
 }
-

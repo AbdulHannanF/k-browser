@@ -9,3 +9,6 @@ authors.workspace = true
 
 [dependencies]
 thiserror = { workspace = true }
+raw-window-handle = "0.6"
+wry = { version = "0.38.2", default-features = false }
+

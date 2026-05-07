@@ -74,7 +74,7 @@ impl NavigationHistory {
 
     /// Check if we can go forward.
     pub fn can_go_forward(&self) -> bool {
-        self.current < self.entries.len() - 1
+        !self.entries.is_empty() && self.current < self.entries.len() - 1
     }
 
     /// Push a new state to the history without reloading.
@@ -87,5 +87,16 @@ impl NavigationHistory {
 impl Default for NavigationHistory {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::NavigationHistory;
+
+    #[test]
+    fn empty_history_cannot_go_forward() {
+        let history = NavigationHistory::new();
+        assert!(!history.can_go_forward());
     }
 }

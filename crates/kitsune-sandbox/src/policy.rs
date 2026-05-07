@@ -1,5 +1,4 @@
 /// Sandbox policy types and validation.
-
 use serde::{Deserialize, Serialize};
 
 /// A sandbox policy rule.
@@ -22,10 +21,14 @@ pub fn validate_profile(profile: &super::SandboxProfile) -> Vec<String> {
     }
 
     if profile.allow_process_spawn {
-        warnings.push("Process spawning is allowed — sandboxed process can create children".to_string());
+        warnings.push(
+            "Process spawning is allowed — sandboxed process can create children".to_string(),
+        );
     }
 
-    if matches!(profile.allow_network, super::NetworkPolicy::Outbound { .. }) && profile.name != "Network" {
+    if matches!(profile.allow_network, super::NetworkPolicy::Outbound { .. })
+        && profile.name != "Network"
+    {
         warnings.push("Outbound network access granted to non-network process".to_string());
     }
 

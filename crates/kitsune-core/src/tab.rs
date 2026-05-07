@@ -1,5 +1,4 @@
 /// Tab management for KitsuneEngine.
-
 use crate::navigation::NavigationHistory;
 use serde::{Deserialize, Serialize};
 
@@ -66,7 +65,7 @@ impl Tab {
         self.favicon_color = Some([
             ((hash >> 16) & 0xFF) as u8,
             ((hash >> 8) & 0xFF) as u8,
-            (hash & 0xFF) as u8
+            (hash & 0xFF) as u8,
         ]);
     }
 

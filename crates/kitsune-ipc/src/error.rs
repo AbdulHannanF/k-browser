@@ -32,7 +32,9 @@ pub enum IpcError {
     Timeout { timeout_ms: u64 },
 
     /// Permission denied — the requesting process lacks the required capability.
-    #[error("Permission denied: role '{role:?}' lacks required privilege '{required_privilege:?}'")]
+    #[error(
+        "Permission denied: role '{role:?}' lacks required privilege '{required_privilege:?}'"
+    )]
     PermissionDenied {
         role: crate::message::ProcessRole,
         required_privilege: crate::message::PrivilegeLevel,

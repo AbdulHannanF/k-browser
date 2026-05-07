@@ -2,10 +2,9 @@
 ///
 /// Cross-site tracking via shared identifiers is architecturally impossible
 /// because the vault never hands the same identifier to two different origins.
-
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
-use sha2::{Sha256, Digest};
+use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 /// A pseudonymous identifier unique to a (user, origin) pair.

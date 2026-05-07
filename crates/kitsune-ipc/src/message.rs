@@ -3,7 +3,6 @@
 /// All messages are serializable and carry a unique correlation ID for
 /// request-response tracking. Messages are the only way sandboxed processes
 /// can interact with privileged resources.
-
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -133,10 +132,7 @@ impl IpcMessage {
 pub enum IpcPayload {
     // --- Vault operations (Sandboxed → Broker) ---
     /// Request a credential from the vault.
-    VaultRequest {
-        key: String,
-        purpose: String,
-    },
+    VaultRequest { key: String, purpose: String },
     /// Vault response with granted access (never contains raw secrets).
     VaultResponse {
         granted: bool,
@@ -175,22 +171,16 @@ pub enum IpcPayload {
 
     // --- DOM operations (Agent → Renderer) ---
     /// Query DOM elements.
-    DomQuery {
-        selector: String,
-    },
+    DomQuery { selector: String },
     /// DOM query result.
-    DomQueryResult {
-        elements: Vec<DomElementSummary>,
-    },
+    DomQueryResult { elements: Vec<DomElementSummary> },
     /// Fill a form field.
     DomFillField {
         selector: String,
         value_token: String, // Token handle, never raw value
     },
     /// Click an element.
-    DomClick {
-        selector: String,
-    },
+    DomClick { selector: String },
     /// DOM operation result.
     DomOperationResult {
         success: bool,
@@ -205,9 +195,7 @@ pub enum IpcPayload {
 
     // --- Navigation (Agent → Broker) ---
     /// Navigate to a URL.
-    NavigateRequest {
-        url: String,
-    },
+    NavigateRequest { url: String },
     /// Navigation result.
     NavigateResponse {
         success: bool,
@@ -222,13 +210,9 @@ pub enum IpcPayload {
         capabilities: Vec<ProcessCapability>,
     },
     /// Acknowledgment of process registration.
-    ProcessRegistered {
-        assigned_id: String,
-    },
+    ProcessRegistered { assigned_id: String },
     /// Process shutdown signal.
-    ProcessShutdown {
-        reason: String,
-    },
+    ProcessShutdown { reason: String },
 
     // --- Agent operations ---
     /// Agent action request.
@@ -246,10 +230,7 @@ pub enum IpcPayload {
 
     // --- Error ---
     /// Error response for any failed operation.
-    Error {
-        code: String,
-        message: String,
-    },
+    Error { code: String, message: String },
 }
 
 /// Summary of a DOM element returned via IPC (never contains sensitive data).

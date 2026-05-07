@@ -46,4 +46,3 @@ impl From<VaultError> for AgentError {
         AgentError::VaultAccessDenied(error.to_string())
     }
 }
-

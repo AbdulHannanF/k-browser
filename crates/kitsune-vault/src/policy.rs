@@ -2,7 +2,6 @@
 ///
 /// Every vault entry carries a DisclosurePolicy. This policy is evaluated
 /// BEFORE any value is returned, and the vault NEVER bypasses the policy.
-
 use crate::types::{AgentId, DomainPattern};
 use serde::{Deserialize, Serialize};
 
@@ -91,9 +90,9 @@ impl DisclosurePolicy {
                 allowed_domains.is_empty() || allowed_domains.iter().any(|p| p.matches(domain))
             }
             Self::AgentAccessWithHIL { .. } => true, // Domain doesn't matter for agent access
-            Self::TrustedAutomation { allowed_domains, .. } => {
-                allowed_domains.iter().any(|p| p.matches(domain))
-            }
+            Self::TrustedAutomation {
+                allowed_domains, ..
+            } => allowed_domains.iter().any(|p| p.matches(domain)),
         }
     }
 
@@ -102,9 +101,11 @@ impl DisclosurePolicy {
         match self {
             Self::NeverDisclose => false,
             Self::LocalFormFillOnly { .. } => false,
-            Self::AgentAccessWithHIL { allowed_agents, max_uses, current_uses } => {
-                *current_uses < *max_uses && allowed_agents.iter().any(|a| a == agent_id)
-            }
+            Self::AgentAccessWithHIL {
+                allowed_agents,
+                max_uses,
+                current_uses,
+            } => *current_uses < *max_uses && allowed_agents.iter().any(|a| a == agent_id),
             Self::TrustedAutomation { allowed_agents, .. } => {
                 allowed_agents.iter().any(|a| a == agent_id)
             }
@@ -118,7 +119,13 @@ impl DisclosurePolicy {
 
     /// Check if biometric confirmation is required.
     pub fn requires_biometric(&self) -> bool {
-        matches!(self, Self::TrustedAutomation { require_biometric: true, .. })
+        matches!(
+            self,
+            Self::TrustedAutomation {
+                require_biometric: true,
+                ..
+            }
+        )
     }
 }
 

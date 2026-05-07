@@ -1,7 +1,6 @@
 /// Pre-built agent templates for common tasks.
 ///
 /// Each template ships with maximum safety defaults.
-
 use kitsune_agent::spec::*;
 
 /// Get all available agent templates.
@@ -94,11 +93,15 @@ pub fn price_tracker_template() -> AgentSpec {
     AgentSpec {
         id: AgentId::new(),
         name: "Price Tracker".to_string(),
-        description: "Watches product pages you care about and notifies you when prices drop.".to_string(),
+        description: "Watches product pages you care about and notifies you when prices drop."
+            .to_string(),
         goal: AgentGoal {
             description: "Monitor product prices and notify on drops".to_string(),
             structured_objective: None,
-            success_criteria: vec!["Check all tracked products".to_string(), "Notify on price drops".to_string()],
+            success_criteria: vec![
+                "Check all tracked products".to_string(),
+                "Notify on price drops".to_string(),
+            ],
         },
         actions: vec![],
         allowed_tools: vec![

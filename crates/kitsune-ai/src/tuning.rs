@@ -125,10 +125,7 @@ impl TuningPipeline {
 
         let examples = Self::load_examples_from_disk(&data_dir);
 
-        info!(
-            examples = examples.len(),
-            "TuningPipeline initialized"
-        );
+        info!(examples = examples.len(), "TuningPipeline initialized");
 
         Self {
             examples,
@@ -219,8 +216,7 @@ impl TuningPipeline {
                 step: 0,
                 reason: format!(
                     "need {} examples, have {}",
-                    self.config.min_examples_before_tune,
-                    examples_count
+                    self.config.min_examples_before_tune, examples_count
                 ),
             });
         }
@@ -260,7 +256,10 @@ impl TuningPipeline {
             })
         })
         .await
-        .map_err(|e| AiError::TuningError { step: 0, reason: e.to_string() })??;
+        .map_err(|e| AiError::TuningError {
+            step: 0,
+            reason: e.to_string(),
+        })??;
 
         self.last_tuned_at = Some(Utc::now());
         self.adapter_version = result.adapter_version;
@@ -342,7 +341,11 @@ mod tests {
         let mut denied = approved_example();
         denied.user_approved = false;
         pipeline.record_example(denied);
-        assert_eq!(pipeline.example_count(), initial + 1, "denied example must not be recorded");
+        assert_eq!(
+            pipeline.example_count(),
+            initial + 1,
+            "denied example must not be recorded"
+        );
     }
 
     #[test]
@@ -357,7 +360,10 @@ mod tests {
             pipeline.record_example(approved_example());
         }
 
-        assert!(!pipeline.should_tune(), "should not tune with fewer than 20 examples");
+        assert!(
+            !pipeline.should_tune(),
+            "should not tune with fewer than 20 examples"
+        );
     }
 
     #[test]

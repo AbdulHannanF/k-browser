@@ -5,7 +5,6 @@
 /// - Provides an opaque token the agent can use (vault handles substitution)
 /// - Performs a direct DOM injection (agent never sees the value)
 /// - Returns only metadata (no credential data at all)
-
 use crate::types::{DomFieldId, TokenHandle, VaultKeyMetadata};
 use serde::{Deserialize, Serialize};
 

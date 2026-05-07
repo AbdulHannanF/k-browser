@@ -2,11 +2,10 @@
 ///
 /// These tests use in-process mock channels so they run without spawning real
 /// child processes.
-
 use kitsune_core::broker::{BrokerEvent, ProcessManager, ProcessStatus};
 use kitsune_ipc::message::{
-    DomHighlight, HighlightPhase, HighlightRect, HighlightStyle, IpcMessage, IpcPayload,
-    ProcessId, ProcessRole,
+    DomHighlight, HighlightPhase, HighlightRect, HighlightStyle, IpcMessage, IpcPayload, ProcessId,
+    ProcessRole,
 };
 use tokio::sync::mpsc;
 
@@ -28,7 +27,12 @@ fn make_highlight_msg(from: ProcessId, to: ProcessId) -> IpcMessage {
         to,
         IpcPayload::SetDomHighlight(DomHighlight {
             element_id: "elem1".to_string(),
-            rect: HighlightRect { x: 0.0, y: 0.0, width: 10.0, height: 10.0 },
+            rect: HighlightRect {
+                x: 0.0,
+                y: 0.0,
+                width: 10.0,
+                height: 10.0,
+            },
             style: HighlightStyle::Reading,
             phase: HighlightPhase::FadingIn,
             phase_start: None,
@@ -45,7 +49,10 @@ async fn test_mock_process_starts_as_running() {
     let mut pm = ProcessManager::new();
     pm.register_mock(ProcessRole::Renderer);
 
-    assert_eq!(pm.status(ProcessRole::Renderer), Some(&ProcessStatus::Running));
+    assert_eq!(
+        pm.status(ProcessRole::Renderer),
+        Some(&ProcessStatus::Running)
+    );
     assert!(pm.is_running(ProcessRole::Renderer));
 }
 
@@ -59,7 +66,9 @@ async fn test_route_to_renderer_succeeds() {
 
     assert!(routed, "Message should have been forwarded to renderer");
 
-    let received = renderer_rx.try_recv().expect("Renderer should have received the message");
+    let received = renderer_rx
+        .try_recv()
+        .expect("Renderer should have received the message");
     if let IpcPayload::SetDomHighlight(h) = received.payload {
         assert_eq!(h.element_id, "elem1");
     } else {
@@ -73,9 +82,9 @@ async fn test_capability_violation_rejected_by_channel() {
     // Capability enforcement happens at the IpcChannel layer (tested in kitsune-ipc),
     // so here we just validate that a payload that requires no routing capability
     // passes through correctly.
-    use std::collections::HashSet;
     use kitsune_ipc::channel::IpcChannel;
     use kitsune_ipc::message::ProcessCapability;
+    use std::collections::HashSet;
 
     let (local, _remote) = IpcChannel::pair(
         ProcessId("renderer".to_string()),
@@ -96,7 +105,10 @@ async fn test_capability_violation_rejected_by_channel() {
 
     // The renderer channel has no VaultRead capability, so send should be rejected
     let result = local.send(vault_req).await;
-    assert!(result.is_err(), "VaultRequest from unprivileged channel must be rejected");
+    assert!(
+        result.is_err(),
+        "VaultRequest from unprivileged channel must be rejected"
+    );
 }
 
 #[tokio::test]
@@ -106,7 +118,10 @@ async fn test_crash_increments_count() {
 
     // Simulate a crash event
     let event_tx = pm.event_sender();
-    event_tx.send(BrokerEvent::ProcessExited(ProcessRole::Renderer)).await.unwrap();
+    event_tx
+        .send(BrokerEvent::ProcessExited(ProcessRole::Renderer))
+        .await
+        .unwrap();
 
     // Give the broker loop a tick to process (we're not running it here,
     // so we call handle_crash indirectly by reading the event in a short loop)
@@ -135,7 +150,9 @@ async fn test_ui_channel_receives_unroutable_message() {
 
     pm.route(shutdown_msg).await;
 
-    let received = ui_rx.try_recv().expect("UI should have received the unroutable message");
+    let received = ui_rx
+        .try_recv()
+        .expect("UI should have received the unroutable message");
     if let IpcPayload::ProcessShutdown { reason } = received.payload {
         assert_eq!(reason, "test");
     } else {

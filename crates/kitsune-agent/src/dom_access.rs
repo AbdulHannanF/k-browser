@@ -1,12 +1,12 @@
-use kitsune_vault::{VaultBackend, VaultKey, RequesterId, RequestContext, types::VaultCategory};
-use kitsune_hil::{HilGate, HilTriggerClass};
-use url::Url;
-use std::sync::Arc;
-use tokio::sync::Mutex;
-use uuid::Uuid;
 use crate::error::{AgentError, AgentResult};
-use tokio::sync::mpsc;
 use crate::executor::WebViewCommand;
+use kitsune_hil::{HilGate, HilTriggerClass};
+use kitsune_vault::{types::VaultCategory, RequestContext, RequesterId, VaultBackend, VaultKey};
+use std::sync::Arc;
+use tokio::sync::mpsc;
+use tokio::sync::Mutex;
+use url::Url;
+use uuid::Uuid;
 
 /// Provides structural, read-only, and safe interaction access to the DOM for agents.
 pub struct DomAccessor {
@@ -135,12 +135,13 @@ impl DomAccessor {
             value = token.display_value(), // opaque token, not raw secret
         );
 
-        self.webview_tx.send(WebViewCommand::EvalJs(script)).await
+        self.webview_tx
+            .send(WebViewCommand::EvalJs(script))
+            .await
             .map_err(|_| AgentError::IpcDisconnected)?;
 
         Ok(())
     }
-
 
     /// Click an element. Trips HIL if it's a submit button.
     pub async fn click_element(&self, selector: &str) -> AgentResult<()> {
@@ -148,11 +149,12 @@ impl DomAccessor {
             description: "Agent is trying to click an element".to_string(),
             reversible: false,
         };
-        self.hil_gate.checkpoint(trigger, vec![]).await.map_err(|e| {
-            AgentError::PermissionDenied {
+        self.hil_gate
+            .checkpoint(trigger, vec![])
+            .await
+            .map_err(|e| AgentError::PermissionDenied {
                 capability: format!("HIL Checkpoint failed: {}", e),
-            }
-        })?;
+            })?;
 
         let script = format!(
             r#"
@@ -195,6 +197,8 @@ impl DomAccessor {
     }
 
     pub async fn get_page_text(&self) -> AgentResult<String> {
-        self.query_text("body").await.map(|opt| opt.unwrap_or_default())
+        self.query_text("body")
+            .await
+            .map(|opt| opt.unwrap_or_default())
     }
 }

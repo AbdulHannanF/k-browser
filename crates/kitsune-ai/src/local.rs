@@ -117,17 +117,17 @@ impl LocalAiBackend {
             // we will simulate the chunked download for UX purposes as permitted,
             // then write the files and the marker. In a production app, we would stream
             // the response body using reqwest natively and compute the SHA256 on the fly.
-            
+
             for i in 1..=10 {
                 tokio::time::sleep(std::time::Duration::from_millis(100)).await;
                 progress(i as f32 / 10.0);
             }
-            
+
             // Write mock files so the system thinks they're downloaded
             std::fs::write(target_dir.join("config.json"), "{}").unwrap();
             std::fs::write(target_dir.join("tokenizer.json"), "{}").unwrap();
             std::fs::write(target_dir.join("model.safetensors"), "mock_weights").unwrap();
-            
+
             // Write marker file
             std::fs::write(target_dir.join("download_complete"), "success").unwrap();
 

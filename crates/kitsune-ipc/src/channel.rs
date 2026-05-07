@@ -3,7 +3,6 @@
 /// Channels enforce capability checks before allowing message delivery.
 /// A sandboxed process cannot send a VaultRequest unless it has been
 /// granted the VaultRead capability by the broker.
-
 use crate::error::{IpcError, IpcResult};
 use crate::message::{IpcMessage, IpcPayload, ProcessCapability, ProcessId};
 use std::collections::HashSet;
@@ -72,10 +71,7 @@ impl IpcChannel {
 
     /// Receive the next message from this channel.
     pub async fn recv(&mut self) -> IpcResult<IpcMessage> {
-        self.incoming_rx
-            .recv()
-            .await
-            .ok_or(IpcError::ChannelClosed)
+        self.incoming_rx.recv().await.ok_or(IpcError::ChannelClosed)
     }
 
     /// Try to receive a message without blocking.

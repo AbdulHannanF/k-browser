@@ -3,7 +3,6 @@
 /// All requests are processed through the privacy layer BEFORE they leave
 /// the engine. This ensures privacy protections cannot be bypassed by
 /// any component.
-
 use crate::{PrivacyAwareRequest, PrivacyReport};
 use tracing::debug;
 
@@ -20,12 +19,7 @@ const KNOWN_TRACKERS: &[&str] = &[
 ];
 
 /// Headers that should be stripped for privacy.
-const PRIVACY_STRIP_HEADERS: &[&str] = &[
-    "referer",
-    "x-forwarded-for",
-    "x-real-ip",
-    "x-client-ip",
-];
+const PRIVACY_STRIP_HEADERS: &[&str] = &["referer", "x-forwarded-for", "x-real-ip", "x-client-ip"];
 
 /// Apply privacy protections to an outgoing request.
 pub fn apply_privacy_protections(request: &mut PrivacyAwareRequest) -> PrivacyReport {
@@ -40,7 +34,6 @@ pub fn apply_privacy_protections(request: &mut PrivacyAwareRequest) -> PrivacyRe
 
     // Strip privacy-sensitive headers
     if settings.strip_referer {
-
         request.headers.retain(|(name, _)| {
             let lower = name.to_lowercase();
             if PRIVACY_STRIP_HEADERS.contains(&lower.as_str()) {

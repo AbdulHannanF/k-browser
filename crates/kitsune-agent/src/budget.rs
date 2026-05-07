@@ -1,7 +1,6 @@
 /// Agent budget tracking — mandatory for all external interactions.
 ///
 /// INVARIANT: If budget is exceeded, the agent MUST pause and escalate via HIL.
-
 use crate::error::{AgentError, AgentResult};
 use crate::spec::MoneyAmount;
 use crate::tools::BudgetStatus;
@@ -71,11 +70,7 @@ impl BudgetTracker {
         // Check session limit
         if let Some(max) = self.max_session_cost {
             if *total > max {
-                warn!(
-                    total = *total,
-                    max = max,
-                    "Session cost limit exceeded"
-                );
+                warn!(total = *total, max = max, "Session cost limit exceeded");
                 return Err(AgentError::BudgetExceeded {
                     spent: format!("{}", *total),
                     limit: format!("{}", max),
@@ -126,7 +121,10 @@ impl BudgetTracker {
             remaining,
             actions_taken: actions,
             max_actions: self.max_actions,
-            exceeded: self.max_session_cost.map(|max| total > max).unwrap_or(false)
+            exceeded: self
+                .max_session_cost
+                .map(|max| total > max)
+                .unwrap_or(false)
                 || actions > self.max_actions,
         }
     }
@@ -185,8 +183,8 @@ mod tests {
             100,
         );
 
-        assert!(tracker.log_cost(80, "Call 1").is_ok());   // $0.80
-        let result = tracker.log_cost(50, "Call 2");          // $0.50 → total $1.30 > $1.00
+        assert!(tracker.log_cost(80, "Call 1").is_ok()); // $0.80
+        let result = tracker.log_cost(50, "Call 2"); // $0.50 → total $1.30 > $1.00
         assert!(matches!(result, Err(AgentError::BudgetExceeded { .. })));
     }
 

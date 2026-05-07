@@ -23,6 +23,9 @@ dirs = { workspace = true }
 raw-window-handle = "0.6"
 anyhow = "1"
 image = { workspace = true }
+reqwest = { version = "0.12", features = ["json", "rustls-tls", "stream"] }
+futures = "0.3"
+urlencoding = "2"
 
 kitsune-core = { path = "../kitsune-core" }
 kitsune-vault = { path = "../kitsune-vault" }
@@ -33,6 +36,7 @@ kitsune-net = { path = "../kitsune-net" }
 kitsune-ipc = { path = "../kitsune-ipc" }
 kitsune-ai = { path = "../kitsune-ai" }
 kitsune-cef = { path = "../kitsune-cef" }
+kitsune-cloud-mock = { path = "../kitsune-cloud-mock" }
 
 [[bin]]
 name = "kitsune"

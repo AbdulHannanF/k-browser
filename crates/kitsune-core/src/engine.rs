@@ -1,13 +1,13 @@
 // Page rendering delegated to WebView2 via wry
 use std::sync::Arc;
-use tracing::info;
 use tokio::sync::mpsc;
+use tracing::info;
 
-use kitsune_agent::{AgentRuntime, executor::WebViewCommand};
+use kitsune_agent::{executor::WebViewCommand, AgentRuntime};
+use kitsune_hil::gate::HilGate;
 use kitsune_ipc::IpcBus;
 use kitsune_net::KitsuneHttpClient;
 use kitsune_vault::backend::VaultBackend;
-use kitsune_hil::gate::HilGate;
 
 use crate::broker::ProcessManager;
 
@@ -73,10 +73,8 @@ impl KitsuneEngine {
         self.running = true;
 
         // Create an initial blank tab
-        self.tabs.push(super::tab::Tab::new(
-            0,
-            "New Tab".to_string(),
-        ));
+        self.tabs
+            .push(super::tab::Tab::new(0, "New Tab".to_string()));
 
         // Start the local demo/mock server so the welcome page is available
         // immediately on http://127.0.0.1:7700
@@ -89,9 +87,12 @@ impl KitsuneEngine {
 
         // Register mock in-process stubs for each child role.
         // These replace real sandboxed processes for the single-process MVP.
-        self.process_manager.register_mock(kitsune_ipc::message::ProcessRole::Renderer);
-        self.process_manager.register_mock(kitsune_ipc::message::ProcessRole::Network);
-        self.process_manager.register_mock(kitsune_ipc::message::ProcessRole::Js);
+        self.process_manager
+            .register_mock(kitsune_ipc::message::ProcessRole::Renderer);
+        self.process_manager
+            .register_mock(kitsune_ipc::message::ProcessRole::Network);
+        self.process_manager
+            .register_mock(kitsune_ipc::message::ProcessRole::Js);
 
         info!("KitsuneEngine started successfully");
         Ok(())

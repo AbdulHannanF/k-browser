@@ -3,7 +3,6 @@
 /// The audit log is stored locally and can be exported to SIEM systems
 /// in the enterprise tier. It records who accessed what, when, and whether
 /// the access was granted or denied.
-
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 

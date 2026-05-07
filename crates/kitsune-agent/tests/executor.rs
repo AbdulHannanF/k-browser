@@ -1,12 +1,14 @@
-use kitsune_agent::spec::{AgentSpec, AgentAction, AgentGoal, AgentAuthor, AgentBudget, AgentConstraints, AgentId};
 use kitsune_agent::dom_access::DomAccessor;
 use kitsune_agent::executor::ScriptedExecutor;
+use kitsune_agent::spec::{
+    AgentAction, AgentAuthor, AgentBudget, AgentConstraints, AgentGoal, AgentId, AgentSpec,
+};
+use kitsune_hil::HilGate;
 use kitsune_html::dom::DomTree;
 use kitsune_vault::VaultBackend;
-use kitsune_hil::HilGate;
-use url::Url;
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use url::Url;
 
 fn build_mock_dom() -> DomTree {
     let mut tree = DomTree::new();
@@ -30,7 +32,9 @@ fn create_test_spec() -> AgentSpec {
             success_criteria: vec![],
         },
         actions: vec![
-            AgentAction::Navigate { url: "https://example.com".to_string() },
+            AgentAction::Navigate {
+                url: "https://example.com".to_string(),
+            },
             AgentAction::Wait { ms: 100 },
         ],
         allowed_tools: vec![],
@@ -49,7 +53,14 @@ async fn test_scripted_executor_runs_to_completion() {
     let dom = Arc::new(Mutex::new(build_mock_dom()));
     let vault = Arc::new(VaultBackend::new("password", &[0; 32]).unwrap());
     let hil_gate = Arc::new(HilGate::new_test_gate());
-    let dom_accessor = Arc::new(Mutex::new(DomAccessor::new(dom, vault, hil_gate, Url::parse("https://initial.com").unwrap(), None, None)));
+    let dom_accessor = Arc::new(Mutex::new(DomAccessor::new(
+        dom,
+        vault,
+        hil_gate,
+        Url::parse("https://initial.com").unwrap(),
+        None,
+        None,
+    )));
 
     let spec = create_test_spec();
     let executor = ScriptedExecutor::new(spec, dom_accessor.clone());

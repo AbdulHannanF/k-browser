@@ -3,7 +3,6 @@
 /// The gate translates low-level agent actions into plain-language confirmations,
 /// presents them to the user, and produces approval tokens that are consumed
 /// by the action executor.
-
 use crate::approval::{ActionId, ApprovalDecision, HilApproval};
 use crate::error::{HilError, HilResult};
 use crate::presentation::HilPresentation;
@@ -134,9 +133,7 @@ impl HilGate {
             .map_err(|_| HilError::Internal("HIL UI channel closed".to_string()))?;
 
         // Wait for user decision
-        let decision = response_rx
-            .await
-            .map_err(|_| HilError::Dismissed)?;
+        let decision = response_rx.await.map_err(|_| HilError::Dismissed)?;
 
         let decision_time = Utc::now() - checkpoint_time;
 
@@ -192,7 +189,7 @@ pub fn respond_to_checkpoint(checkpoint: HilCheckpoint, approved: bool, note: Op
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::trigger::{Money, HilTriggerClass};
+    use crate::trigger::{HilTriggerClass, Money};
 
     #[tokio::test]
     async fn test_hil_gate_approval_flow() {

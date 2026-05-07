@@ -2,7 +2,6 @@
 ///
 /// An AgentSpec is the single source of truth for what an agent can do.
 /// All capabilities are explicit — nothing happens implicitly.
-
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -74,12 +73,29 @@ pub struct AgentGoal {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum AgentAction {
-    Navigate { url: String },
-    QueryText { selector: String, purpose: String },
-    QueryLinks { selector: String, purpose: String },
-    FillField { selector: String, value: String, purpose: String },
-    Click { selector: String, purpose: String },
-    Wait { ms: u64 },
+    Navigate {
+        url: String,
+    },
+    QueryText {
+        selector: String,
+        purpose: String,
+    },
+    QueryLinks {
+        selector: String,
+        purpose: String,
+    },
+    FillField {
+        selector: String,
+        value: String,
+        purpose: String,
+    },
+    Click {
+        selector: String,
+        purpose: String,
+    },
+    Wait {
+        ms: u64,
+    },
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum AgentTool {

@@ -3,12 +3,11 @@
 /// The broker is the privileged orchestrator. It never routes Renderer ↔ Network
 /// directly; all messages flow through this central authority, which enforces
 /// capability checks and crash-recovery policy.
-
 use kitsune_ipc::message::{IpcMessage, IpcPayload, ProcessId, ProcessRole};
 use std::collections::HashMap;
 use std::time::Instant;
-use tokio::sync::mpsc;
 use tokio::process::Child;
+use tokio::sync::mpsc;
 use tracing::{error, info, warn};
 
 // ---------------------------------------------------------------------------
@@ -33,10 +32,7 @@ pub enum ProcessStatus {
 #[derive(Debug)]
 pub enum BrokerEvent {
     /// An IPC message received from a child process.
-    FromChild {
-        role: ProcessRole,
-        msg: IpcMessage,
-    },
+    FromChild { role: ProcessRole, msg: IpcMessage },
     /// A child process exited unexpectedly.
     ProcessExited(ProcessRole),
     /// A child confirmed it is ready to accept work.
@@ -91,12 +87,12 @@ fn route_payload(payload: &IpcPayload) -> Option<ProcessRole> {
         | IpcPayload::ClearAllDomHighlights => Some(ProcessRole::Renderer),
 
         // Messages that go to the network process
-        IpcPayload::NetworkFetchRequest { .. }
-        | IpcPayload::NavigateRequest { .. } => Some(ProcessRole::Network),
+        IpcPayload::NetworkFetchRequest { .. } | IpcPayload::NavigateRequest { .. } => {
+            Some(ProcessRole::Network)
+        }
 
         // Messages originating from agent / JS that need broker mediation
-        IpcPayload::HilCheckpointRequest { .. }
-        | IpcPayload::VaultRequest { .. } => None, // broker handles locally
+        IpcPayload::HilCheckpointRequest { .. } | IpcPayload::VaultRequest { .. } => None, // broker handles locally
 
         // Responses and results are forwarded to the UI / originating channel
         IpcPayload::VaultResponse { .. }
@@ -140,10 +136,7 @@ impl ProcessManager {
     /// Register a mock in-process "child" (used in tests and single-process mode).
     ///
     /// Returns the `mpsc::Receiver` that the mock child reads messages from.
-    pub fn register_mock(
-        &mut self,
-        role: ProcessRole,
-    ) -> mpsc::Receiver<IpcMessage> {
+    pub fn register_mock(&mut self, role: ProcessRole) -> mpsc::Receiver<IpcMessage> {
         let (tx, rx) = mpsc::channel(64);
         self.processes.insert(
             role,
@@ -186,9 +179,7 @@ impl ProcessManager {
         // Monitor the child for unexpected exits
         let event_tx = self.event_tx.clone();
         tokio::spawn(async move {
-            let _ = event_tx
-                .send(BrokerEvent::ProcessReady(role))
-                .await;
+            let _ = event_tx.send(BrokerEvent::ProcessReady(role)).await;
         });
 
         self.processes.insert(
@@ -301,7 +292,10 @@ impl ProcessManager {
                     ProcessId("broker".to_string()),
                     ProcessId("ui".to_string()),
                     IpcPayload::ProcessShutdown {
-                        reason: format!("{:?} process crashed {} times and is unrecoverable", role, proc.crash_count),
+                        reason: format!(
+                            "{:?} process crashed {} times and is unrecoverable",
+                            role, proc.crash_count
+                        ),
                     },
                 );
                 if let Some(ui_tx) = &self.ui_tx {

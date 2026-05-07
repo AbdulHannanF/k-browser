@@ -3,12 +3,14 @@
 use crate::crypto::{CryptoBackend, SecretKey};
 use crate::db;
 use crate::error::{VaultError, VaultResult};
-use crate::types::{RequestContext, SensitiveValue, TokenHandle, VaultKey, VaultEntry, VaultCategory};
+use crate::types::{
+    RequestContext, SensitiveValue, TokenHandle, VaultCategory, VaultEntry, VaultKey,
+};
 use hmac::{Hmac, Mac};
-use sha2::Sha256;
-use std::sync::{Arc, Mutex};
 use keyring;
 use rand::Rng;
+use sha2::Sha256;
+use std::sync::{Arc, Mutex};
 
 /// The vault backend, responsible for storing and retrieving encrypted secrets.
 pub struct VaultBackend {
@@ -26,18 +28,24 @@ impl VaultBackend {
 
         let secret_key = CryptoBackend::derive_key(master_password, salt)?;
 
-        let entry = keyring::Entry::new("kitsune-vault", "secret-salt").map_err(|e| VaultError::SecureStorageUnavailable(e.to_string()))?;
+        let entry = keyring::Entry::new("kitsune-vault", "secret-salt")
+            .map_err(|e| VaultError::SecureStorageUnavailable(e.to_string()))?;
         let salt_hex = match entry.get_password() {
             Ok(s) => s,
             Err(keyring::Error::NoEntry) => {
                 let new_salt: [u8; 32] = rand::thread_rng().gen();
                 let new_salt_hex = hex::encode(new_salt);
-                entry.set_password(&new_salt_hex).map_err(|e| VaultError::SecureStorageUnavailable(e.to_string()))?;
+                entry
+                    .set_password(&new_salt_hex)
+                    .map_err(|e| VaultError::SecureStorageUnavailable(e.to_string()))?;
                 new_salt_hex
             }
             Err(e) => return Err(VaultError::SecureStorageUnavailable(e.to_string())),
         };
-        let secret_salt: [u8; 32] = hex::decode(salt_hex).map_err(|_| VaultError::SecureStorageUnavailable("Invalid salt format".into()))?.try_into().map_err(|_| VaultError::SecureStorageUnavailable("Invalid salt length".into()))?;
+        let secret_salt: [u8; 32] = hex::decode(salt_hex)
+            .map_err(|_| VaultError::SecureStorageUnavailable("Invalid salt format".into()))?
+            .try_into()
+            .map_err(|_| VaultError::SecureStorageUnavailable("Invalid salt length".into()))?;
 
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),
@@ -47,7 +55,12 @@ impl VaultBackend {
     }
 
     /// Store a new entry in the vault.
-    pub fn store(&self, key: &VaultKey, value: SensitiveValue, context: &RequestContext) -> VaultResult<()> {
+    pub fn store(
+        &self,
+        key: &VaultKey,
+        value: SensitiveValue,
+        context: &RequestContext,
+    ) -> VaultResult<()> {
         let origin = context.domain.as_deref().unwrap_or("");
         let mut mac = Hmac::<Sha256>::new_from_slice(&self.secret_salt).unwrap();
         mac.update(origin.as_bytes());
@@ -81,8 +94,15 @@ impl VaultBackend {
         let origin_pseudonym = hex::encode(mac.finalize().into_bytes());
 
         let conn = self.conn.lock().unwrap();
-        let entry = db::retrieve_entry(&conn, &origin_pseudonym, &key.category.to_string(), &key.label)?
-            .ok_or_else(|| VaultError::KeyNotFound { key: key.label.clone() })?;
+        let entry = db::retrieve_entry(
+            &conn,
+            &origin_pseudonym,
+            &key.category.to_string(),
+            &key.label,
+        )?
+        .ok_or_else(|| VaultError::KeyNotFound {
+            key: key.label.clone(),
+        })?;
 
         let _decrypted_value = CryptoBackend::decrypt(&entry.encrypted_value, &self.secret_key)?;
 

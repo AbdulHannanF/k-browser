@@ -90,7 +90,11 @@ pub struct AiRequest {
 
 impl AiRequest {
     /// Create a new AI request.
-    pub fn new(task_type: TaskType, context: impl Into<String>, agent_id: impl Into<String>) -> Self {
+    pub fn new(
+        task_type: TaskType,
+        context: impl Into<String>,
+        agent_id: impl Into<String>,
+    ) -> Self {
         Self {
             task_type,
             context: context.into(),

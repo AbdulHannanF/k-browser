@@ -1,16 +1,18 @@
 /// Agent runtime — executes agents within safety constraints.
-
 use crate::budget::BudgetTracker;
 use crate::error::{AgentError, AgentResult};
-use crate::spec::{AgentSpec, AgentTool, DomainPolicy, AgentId, AgentGoal, AgentConstraints, AgentAuthor, VaultAccessLevel, AgentBudget};
-use crate::tools::*;
-use std::sync::Arc;
-use tracing::{info, warn};
-use tokio::sync::mpsc;
 use crate::executor::WebViewCommand;
-use url::Url;
-use kitsune_vault::VaultBackend;
+use crate::spec::{
+    AgentAuthor, AgentBudget, AgentConstraints, AgentGoal, AgentId, AgentSpec, AgentTool,
+    DomainPolicy, VaultAccessLevel,
+};
+use crate::tools::*;
 use kitsune_hil::HilGate;
+use kitsune_vault::VaultBackend;
+use std::sync::Arc;
+use tokio::sync::mpsc;
+use tracing::{info, warn};
+use url::Url;
 
 /// Context provided to an executing agent.
 pub struct AgentContext {
@@ -207,7 +209,11 @@ pub fn get_system_templates() -> Vec<AgentSpec> {
                 success_criteria: vec!["Text extracted".to_string()],
             },
             actions: vec![],
-            allowed_tools: vec![AgentTool::Navigate, AgentTool::DomRead, AgentTool::TextExtract],
+            allowed_tools: vec![
+                AgentTool::Navigate,
+                AgentTool::DomRead,
+                AgentTool::TextExtract,
+            ],
             constraints: AgentConstraints {
                 allowed_domains: DomainPolicy::AllowAll,
                 ..Default::default()
@@ -229,7 +235,12 @@ pub fn get_system_templates() -> Vec<AgentSpec> {
                 success_criteria: vec!["Form submitted".to_string()],
             },
             actions: vec![],
-            allowed_tools: vec![AgentTool::DomRead, AgentTool::FormFill, AgentTool::FormSubmit, AgentTool::Click],
+            allowed_tools: vec![
+                AgentTool::DomRead,
+                AgentTool::FormFill,
+                AgentTool::FormSubmit,
+                AgentTool::Click,
+            ],
             constraints: AgentConstraints {
                 can_access_vault: vec![VaultAccessLevel::FormFillWithHIL],
                 hil_required_for: vec!["submit".to_string()],
@@ -252,9 +263,16 @@ pub fn get_system_templates() -> Vec<AgentSpec> {
                 success_criteria: vec!["Price found".to_string()],
             },
             actions: vec![],
-            allowed_tools: vec![AgentTool::Navigate, AgentTool::DomRead, AgentTool::TextExtract],
+            allowed_tools: vec![
+                AgentTool::Navigate,
+                AgentTool::DomRead,
+                AgentTool::TextExtract,
+            ],
             constraints: AgentConstraints {
-                allowed_domains: DomainPolicy::AllowList(vec!["amazon.com".into(), "ebay.com".into()]),
+                allowed_domains: DomainPolicy::AllowList(vec![
+                    "amazon.com".into(),
+                    "ebay.com".into(),
+                ]),
                 ..Default::default()
             },
             triggers: vec![],
@@ -274,7 +292,12 @@ pub fn get_system_templates() -> Vec<AgentSpec> {
                 success_criteria: vec!["Inbox processed".to_string()],
             },
             actions: vec![],
-            allowed_tools: vec![AgentTool::Navigate, AgentTool::DomRead, AgentTool::TextExtract, AgentTool::Click],
+            allowed_tools: vec![
+                AgentTool::Navigate,
+                AgentTool::DomRead,
+                AgentTool::TextExtract,
+                AgentTool::Click,
+            ],
             constraints: AgentConstraints {
                 can_access_vault: vec![VaultAccessLevel::TokenWithHIL],
                 ..Default::default()
@@ -296,7 +319,12 @@ pub fn get_system_templates() -> Vec<AgentSpec> {
                 success_criteria: vec!["Audits complete".to_string()],
             },
             actions: vec![],
-            allowed_tools: vec![AgentTool::Navigate, AgentTool::FormFill, AgentTool::FormSubmit, AgentTool::Click],
+            allowed_tools: vec![
+                AgentTool::Navigate,
+                AgentTool::FormFill,
+                AgentTool::FormSubmit,
+                AgentTool::Click,
+            ],
             constraints: AgentConstraints {
                 can_access_vault: vec![VaultAccessLevel::TrustedAutomation],
                 hil_required_for: vec!["start_audit".to_string()],

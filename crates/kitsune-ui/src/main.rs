@@ -1,16 +1,21 @@
 /// KitsuneEngine — Main Entry Point
 ///
 /// Built in Rust. Grounded in trust. Never leaks.
-
+use eframe::egui;
 use kitsune_ui::app::KitsuneBrowser;
 use tracing_subscriber::EnvFilter;
 
 fn main() -> eframe::Result<()> {
+    // Initialize CEF early for child processes (must be before window creation)
+    if let Err(e) = kitsune_cef::initialize() {
+        eprintln!("Failed to initialize CEF: {:?}", e);
+        std::process::exit(1);
+    }
+
     // Initialize structured logging
     tracing_subscriber::fmt()
         .with_env_filter(
-            EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| EnvFilter::new("info")),
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
         )
         .with_target(true)
         .with_thread_ids(true)

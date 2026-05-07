@@ -14,4 +14,4 @@ pub use bus::IpcBus;
 pub use channel::IpcChannel;
 pub use error::{IpcError, IpcResult};
 pub use message::*;
-pub use transport::{IpcServer, IpcChannel as TransportChannel};
+pub use transport::{IpcChannel as TransportChannel, IpcServer};

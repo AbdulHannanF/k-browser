@@ -2,7 +2,6 @@
 ///
 /// The presentation is designed for non-technical users. It translates
 /// low-level agent actions into clear, warm, plain-language descriptions.
-
 use crate::trigger::HilTriggerClass;
 use serde::{Deserialize, Serialize};
 
@@ -71,10 +70,8 @@ impl HilPresentation {
 
                 let cost_display = amount.as_ref().map(|m| m.display());
 
-                let field_names: Vec<String> = fields_involved
-                    .iter()
-                    .map(|f| f.label.clone())
-                    .collect();
+                let field_names: Vec<String> =
+                    fields_involved.iter().map(|f| f.label.clone()).collect();
 
                 let mut all_data = data_labels.to_vec();
                 all_data.extend(field_names);
@@ -99,10 +96,8 @@ impl HilPresentation {
                 implied_cost,
                 terms_url,
             } => {
-                let what_will_happen = format!(
-                    "Your assistant wants to create an account on {}",
-                    service
-                );
+                let what_will_happen =
+                    format!("Your assistant wants to create an account on {}", service);
 
                 let cost_display = implied_cost.as_ref().map(|p| p.description.clone());
 
