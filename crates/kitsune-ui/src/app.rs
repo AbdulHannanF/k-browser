@@ -133,10 +133,27 @@ pub struct KitsuneBrowser {
 
     // Settings state
     pub show_settings: bool,
+    pub settings_provider: SettingsProvider,
     pub settings_api_key: String,
     pub settings_endpoint: String,
     pub settings_model: String,
     pub settings_saved: bool,
+    pub settings_test_status: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SettingsProvider {
+    OpenAiCompatible,
+    Ollama,
+}
+
+impl SettingsProvider {
+    pub fn wire_value(&self) -> &'static str {
+        match self {
+            Self::OpenAiCompatible => "open_ai_compatible",
+            Self::Ollama => "ollama",
+        }
+    }
 }
 
 /// Actions received from the agent SSE stream
@@ -192,10 +209,12 @@ impl KitsuneBrowser {
             agent_rx,
             agent_tx,
             show_settings: false,
+            settings_provider: SettingsProvider::OpenAiCompatible,
             settings_api_key: String::new(),
             settings_endpoint: "https://api.openai.com/v1/chat/completions".to_string(),
             settings_model: "gpt-4o-mini".to_string(),
             settings_saved: false,
+            settings_test_status: None,
         }
     }
 

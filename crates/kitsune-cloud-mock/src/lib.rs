@@ -30,7 +30,7 @@ use tokio::sync::Mutex;
 use tower_http::cors::CorsLayer;
 use tracing::info;
 
-use agent_brain::{AgentAction, AgentBrain, AiSettings};
+use agent_brain::{AgentAction, AgentBrain, AiProvider, AiSettings};
 
 // ---------------------------------------------------------------------------
 // Application state
@@ -166,6 +166,9 @@ async fn handle_ai_action() -> Json<AiActionResponse> {
 
 #[derive(Deserialize)]
 struct SettingsInput {
+    #[serde(default)]
+    provider: AiProvider,
+    #[serde(default)]
     api_key: String,
     #[serde(default = "default_endpoint")]
     endpoint: String,
@@ -184,6 +187,7 @@ fn default_model() -> String {
 #[derive(Serialize)]
 struct SettingsStatus {
     configured: bool,
+    provider: AiProvider,
     endpoint: String,
     model: String,
 }
@@ -195,6 +199,7 @@ async fn save_settings(
 ) -> impl IntoResponse {
     let mut state = state.lock().await;
     state.settings = AiSettings {
+        provider: input.provider,
         api_key: input.api_key,
         endpoint: if input.endpoint.is_empty() {
             default_endpoint()
@@ -208,6 +213,7 @@ async fn save_settings(
         },
     };
     info!(
+        provider = ?state.settings.provider,
         endpoint = %state.settings.endpoint,
         model = %state.settings.model,
         "AI settings saved"
@@ -220,6 +226,7 @@ async fn get_settings(State(state): State<SharedState>) -> Json<SettingsStatus> 
     let state = state.lock().await;
     Json(SettingsStatus {
         configured: state.settings.is_configured(),
+        provider: state.settings.provider,
         endpoint: state.settings.endpoint.clone(),
         model: state.settings.model.clone(),
     })
