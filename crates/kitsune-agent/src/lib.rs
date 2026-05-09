@@ -11,6 +11,7 @@
 // 5. Agent lineage is tracked — sub-agents inherit intersection of parent constraints
 
 pub mod action;
+pub mod ai_client;
 pub mod budget;
 pub mod dom_access;
 pub mod dom_observer;

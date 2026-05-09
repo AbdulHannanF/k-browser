@@ -19,6 +19,14 @@ semver = { workspace = true }
 futures = { workspace = true }
 parking_lot = { workspace = true }
 reqwest = { workspace = true }
+sha2 = { workspace = true }
+rand = { workspace = true }
+dirs = { workspace = true }
+pdf-extract = "0.7"
+docx-rs = "0.4"
+notify = "6"
+base64 = "0.22"
+urlencoding = "2"
 
 kitsune-vault = { path = "../kitsune-vault" }
 kitsune-hil = { path = "../kitsune-hil" }
