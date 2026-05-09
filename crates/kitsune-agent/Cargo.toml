@@ -18,6 +18,7 @@ enumset = { workspace = true }
 semver = { workspace = true }
 futures = { workspace = true }
 parking_lot = { workspace = true }
+reqwest = { workspace = true }
 
 kitsune-vault = { path = "../kitsune-vault" }
 kitsune-hil = { path = "../kitsune-hil" }

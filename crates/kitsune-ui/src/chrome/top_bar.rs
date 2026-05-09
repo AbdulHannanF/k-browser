@@ -137,6 +137,37 @@ pub fn top_bar(ctx: &egui::Context, browser: &mut KitsuneBrowser) {
                     });
                 
                 ui.add_space(8.0);
+
+                // Downloads button — shows count badge when downloads are active.
+                let in_progress = browser
+                    .downloads
+                    .iter()
+                    .filter(|d| d.status == crate::app::DownloadStatus::InProgress)
+                    .count();
+                let dl_label = if in_progress > 0 {
+                    format!("⬇{}", in_progress)
+                } else {
+                    "⬇".to_string()
+                };
+                let dl_col = if in_progress > 0 {
+                    KitsuneTheme::AMBER
+                } else {
+                    KitsuneTheme::TEXT1
+                };
+                let dl_btn = egui::Button::new(
+                    egui::RichText::new(&dl_label).size(13.0).color(dl_col),
+                )
+                .frame(false)
+                .min_size(egui::vec2(28.0, 24.0));
+                if ui
+                    .add(dl_btn)
+                    .on_hover_text("Downloads")
+                    .clicked()
+                {
+                    browser.show_downloads = !browser.show_downloads;
+                }
+
+                ui.add_space(4.0);
                 if nav_btn(ui, "⚙", "API Settings").clicked() {
                     browser.show_settings = true;
                 }

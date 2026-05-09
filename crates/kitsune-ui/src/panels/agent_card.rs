@@ -17,9 +17,8 @@ pub struct AgentCard {
 }
 
 impl AgentCard {
-    /// Returns true if the run (▶) button was clicked.
+    /// Returns true if the card was clicked.
     pub fn render(&self, ui: &mut egui::Ui) -> bool {
-        let run_clicked = false;
         let (badge_col, badge_txt) = match self.status {
             AgentStatus::Idle => (KitsuneTheme::TEXT2, "idle"),
             AgentStatus::Running => (KitsuneTheme::AMBER, "running"),
@@ -38,10 +37,26 @@ impl AgentCard {
             KitsuneTheme::BORDER
         };
 
+        // Read last frame's hover state so the fill/stroke are correct this frame
+        // (egui standard pattern: 1-frame delay is imperceptible at 60 fps).
+        let card_id = egui::Id::new(self.name).with("card");
+        let prev_hovered = ui.ctx().data(|d| d.get_temp::<bool>(card_id).unwrap_or(false));
+
+        let actual_fill = if prev_hovered && !is_running {
+            KitsuneTheme::BG3
+        } else {
+            fill
+        };
+        let actual_stroke = if prev_hovered {
+            egui::Stroke::new(1.0, KitsuneTheme::AMBER)
+        } else {
+            egui::Stroke::new(1.0, stroke_col)
+        };
+
         let resp = egui::Frame::none()
-            .fill(fill)
+            .fill(actual_fill)
             .rounding(egui::Rounding::same(7.0))
-            .stroke(egui::Stroke::new(1.0, stroke_col))
+            .stroke(actual_stroke)
             .inner_margin(egui::Margin::symmetric(10.0, 8.0))
             .show(ui, |ui| {
                 ui.set_min_width(ui.available_width());
@@ -89,15 +104,9 @@ impl AgentCard {
             })
             .response;
 
-        // Hover glow effect
-        if resp.hovered() {
-            ui.painter().rect_stroke(
-                resp.rect,
-                egui::Rounding::same(7.0),
-                egui::Stroke::new(1.0, KitsuneTheme::BORDER2),
-            );
-        }
-
-        run_clicked
+        // Compute full-card interaction and store hover state for next frame.
+        let card_resp = ui.interact(resp.rect, card_id, egui::Sense::click());
+        ui.ctx().data_mut(|d| d.insert_temp(card_id, card_resp.hovered()));
+        card_resp.clicked()
     }
 }

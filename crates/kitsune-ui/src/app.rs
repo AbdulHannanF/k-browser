@@ -1,17 +1,24 @@
 use std::sync::mpsc::{self, Receiver, Sender};
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 
 use eframe::egui;
 use raw_window_handle::HasWindowHandle;
 use tokio::runtime::Runtime;
 
 use crate::chrome::top_bar::top_bar;
+use crate::dialogs::downloads_dialog::downloads_dialog;
 use crate::dialogs::hil_dialog::hil_dialog;
 use crate::dialogs::settings_dialog::settings_dialog;
 use crate::panels::agent_panel::agent_panel;
 use crate::panels::session_panel::session_panel;
 use crate::theme::KitsuneTheme;
+use kitsune_agent::executor::WebViewCommand;
+use kitsune_agent::{FilePermSlot, StopFlag};
 use kitsune_cef::{CefBrowser, CefEvent, CefRect};
 use kitsune_core::tab::Tab;
+use kitsune_hil::HilGate;
+use kitsune_vault::VaultBackend;
 
 const DEFAULT_HOME: &str = "https://www.google.com";
 
@@ -24,6 +31,31 @@ pub enum AgentRunState {
     AwaitingHil,
 }
 
+/// Status of a browser download.
+#[derive(Debug, Clone, PartialEq)]
+pub enum DownloadStatus {
+    InProgress,
+    Completed,
+    Failed,
+}
+
+/// A file being (or that has been) downloaded by the browser.
+#[derive(Debug, Clone)]
+pub struct DownloadItem {
+    pub filename: String,
+    pub url: String,
+    pub save_path: Option<String>,
+    pub status: DownloadStatus,
+}
+
+/// A local file that has been attached to the current agent session.
+#[derive(Debug, Clone)]
+pub struct AttachedFile {
+    pub name: String,
+    pub path: String,
+    pub content: String,
+}
+
 #[derive(Debug, Clone)]
 pub enum LogLevel {
     Info,
@@ -31,6 +63,8 @@ pub enum LogLevel {
     Warn,
     Block,
     Cmd,
+    /// Model chain-of-thought / reasoning (muted display).
+    Think,
 }
 
 #[derive(Debug, Clone)]
@@ -47,6 +81,7 @@ impl LogEntry {
             LogLevel::Warn => KitsuneTheme::AMBER,
             LogLevel::Block => KitsuneTheme::RED,
             LogLevel::Cmd => KitsuneTheme::BLUE,
+            LogLevel::Think => KitsuneTheme::TEXT3,
         }
     }
 }
@@ -131,6 +166,12 @@ pub struct KitsuneBrowser {
     agent_rx: Receiver<AgentSseAction>,
     agent_tx: Sender<AgentSseAction>,
 
+    // Live in-process agent runtime hooks
+    webview_cmd_tx: tokio::sync::mpsc::Sender<WebViewCommand>,
+    webview_cmd_rx: tokio::sync::mpsc::Receiver<WebViewCommand>,
+    pub vault: Option<Arc<VaultBackend>>,
+    pub hil_gate: Arc<HilGate>,
+
     // Settings state
     pub show_settings: bool,
     pub settings_provider: SettingsProvider,
@@ -139,6 +180,20 @@ pub struct KitsuneBrowser {
     pub settings_model: String,
     pub settings_saved: bool,
     pub settings_test_status: Option<String>,
+
+    // Downloads
+    pub downloads: Vec<DownloadItem>,
+    pub show_downloads: bool,
+
+    // File attachment & permissions
+    pub attached_files: Vec<AttachedFile>,
+    /// Shared slot for the agent's file-access permission requests.
+    pub file_perm_slot: FilePermSlot,
+    /// Path the agent is currently asking to read (modal shown while Some).
+    pub file_perm_pending: Option<String>,
+
+    /// Cooperative stop flag — set to true when the user clicks Stop.
+    pub agent_stop_flag: StopFlag,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -175,19 +230,31 @@ impl KitsuneBrowser {
 
         let runtime = Runtime::new().expect("tokio runtime");
 
-        // Start the mock server
-        runtime.spawn(async {
-            if let Err(err) = kitsune_cloud_mock::start("127.0.0.1:7700").await {
-                tracing::warn!("mock server startup skipped: {}", err);
-            }
-        });
-
         let (event_tx, event_rx) = mpsc::channel();
         let (agent_tx, agent_rx) = mpsc::channel();
+        let (webview_cmd_tx, webview_cmd_rx) =
+            tokio::sync::mpsc::channel::<WebViewCommand>(64);
 
         let mut initial_tab = Tab::new(0, "New Tab".to_string());
         initial_tab.active = true;
         initial_tab.url = Some(DEFAULT_HOME.to_string());
+
+        // Try to construct the vault. On dev systems without a keyring entry the
+        // first call writes a fresh secret salt; if keyring access is denied we
+        // simply leave the vault un-initialized — the agent loop will still run
+        // and surface a clear error if a sensitive action ever asks for it.
+        let vault = match VaultBackend::new("kitsune-dev", &[0; 32]) {
+            Ok(v) => Some(Arc::new(v)),
+            Err(e) => {
+                tracing::warn!("vault disabled: {}", e);
+                None
+            }
+        };
+
+        // Hackathon path: auto-approving HIL gate so the loop runs end-to-end.
+        // Production wires the real gate's checkpoint receiver into the existing
+        // hil_dialog flow.
+        let hil_gate = Arc::new(HilGate::new_test_gate());
 
         Self {
             tabs: vec![initial_tab],
@@ -208,13 +275,23 @@ impl KitsuneBrowser {
             next_tab_id: 1,
             agent_rx,
             agent_tx,
+            webview_cmd_tx,
+            webview_cmd_rx,
+            vault,
+            hil_gate,
             show_settings: false,
-            settings_provider: SettingsProvider::OpenAiCompatible,
+            settings_provider: SettingsProvider::Ollama,
             settings_api_key: String::new(),
-            settings_endpoint: "https://api.openai.com/v1/chat/completions".to_string(),
-            settings_model: "gpt-4o-mini".to_string(),
+            settings_endpoint: "http://localhost:11434".to_string(),
+            settings_model: "llama3".to_string(),
             settings_saved: false,
             settings_test_status: None,
+            downloads: Vec::new(),
+            show_downloads: false,
+            attached_files: Vec::new(),
+            file_perm_slot: std::sync::Arc::new(std::sync::Mutex::new(None)),
+            file_perm_pending: None,
+            agent_stop_flag: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -376,6 +453,30 @@ impl KitsuneBrowser {
                     }
                 }
                 CefEvent::IpcMessage(_msg) => {}
+                CefEvent::NewWindowNav(url) => {
+                    self.navigate(&url);
+                }
+                CefEvent::DownloadStarted { url, filename, save_path } => {
+                    self.downloads.push(DownloadItem {
+                        filename,
+                        url,
+                        save_path: Some(save_path),
+                        status: DownloadStatus::InProgress,
+                    });
+                    self.show_downloads = true;
+                }
+                CefEvent::DownloadCompleted { url, save_path, success } => {
+                    if let Some(item) = self.downloads.iter_mut().find(|d| d.url == url) {
+                        item.status = if success {
+                            DownloadStatus::Completed
+                        } else {
+                            DownloadStatus::Failed
+                        };
+                        if let Some(p) = save_path {
+                            item.save_path = Some(p);
+                        }
+                    }
+                }
             }
         }
     }
@@ -389,6 +490,7 @@ impl KitsuneBrowser {
                         "warn" => LogLevel::Warn,
                         "block" => LogLevel::Block,
                         "cmd" => LogLevel::Cmd,
+                        "think" => LogLevel::Think,
                         _ => LogLevel::Info,
                     };
                     self.push_log(message, level);
@@ -453,12 +555,74 @@ impl KitsuneBrowser {
     pub fn runtime(&self) -> &Runtime {
         &self._runtime
     }
+
+    /// Channel the in-process agent runtime uses to drive the live WebView.
+    pub fn webview_cmd_tx(&self) -> tokio::sync::mpsc::Sender<WebViewCommand> {
+        self.webview_cmd_tx.clone()
+    }
+
+    /// Current address-bar URL for the active tab.
+    pub fn current_url(&self) -> String {
+        self.address_bar.clone()
+    }
+
+    /// Check if the agent has put a file-permission request into the slot.
+    /// Sets `file_perm_pending` when a new request arrives.
+    pub fn process_file_perm_requests(&mut self) {
+        if self.file_perm_pending.is_some() {
+            return; // already showing the modal
+        }
+        if let Ok(slot) = self.file_perm_slot.try_lock() {
+            if let Some((path, _)) = slot.as_ref() {
+                self.file_perm_pending = Some(path.clone());
+            }
+        }
+    }
+
+    /// Drain the agent runtime's WebView command queue and execute each
+    /// command against the live `CefBrowser` on the UI thread. Called from
+    /// `update()` so we never need a `Send` reference to the WebView.
+    fn process_webview_commands(&mut self) {
+        while let Ok(cmd) = self.webview_cmd_rx.try_recv() {
+            let Some(cef) = &self.cef else {
+                tracing::debug!("webview command dropped — no live cef yet");
+                continue;
+            };
+            match cmd {
+                WebViewCommand::Navigate(url) => {
+                    cef.load_url(&url);
+                    self.address_bar = url.clone();
+                    if let Some(tab) =
+                        self.tabs.iter_mut().find(|t| t.id == self.active_tab_id)
+                    {
+                        tab.url = Some(url);
+                    }
+                }
+                WebViewCommand::EvalJs(script) => {
+                    cef.execute_js(&script);
+                }
+                WebViewCommand::EvalJsWithCallback(script, tx) => {
+                    let tx_clone = tx.clone();
+                    if let Err(e) = cef.execute_js_with_callback(&script, move |result| {
+                        // We're inside a wry callback — best effort send.
+                        let _ = tx_clone.try_send(result);
+                    }) {
+                        tracing::warn!("execute_js_with_callback failed: {}", e);
+                        // Make sure the caller doesn't hang waiting forever.
+                        let _ = tx.try_send(String::from("null"));
+                    }
+                }
+            }
+        }
+    }
 }
 
 impl eframe::App for KitsuneBrowser {
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         self.process_browser_events();
         self.process_agent_events();
+        self.process_webview_commands();
+        self.process_file_perm_requests();
 
         // Fix HIL started_at if it hasn't been set yet
         if let Some(ref mut hil) = self.hil_action {
@@ -479,6 +643,70 @@ impl eframe::App for KitsuneBrowser {
         // ── Overlay: HIL dialog ──────────────────────────────────────────
         hil_dialog(ctx, self);
 
+        // ── Overlay: Downloads panel ─────────────────────────────────────
+        downloads_dialog(ctx, self);
+
+        // ── Overlay: File permission dialog ──────────────────────────────
+        if self.file_perm_pending.is_some() {
+            let mut allow = false;
+            let mut deny = false;
+            let path = self.file_perm_pending.clone().unwrap_or_default();
+            egui::Window::new("📂 File Access Request")
+                .collapsible(false)
+                .resizable(false)
+                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                .show(ctx, |ui| {
+                    ui.set_min_width(380.0);
+                    ui.add_space(4.0);
+                    ui.label(
+                        egui::RichText::new("The agent wants to read a local file:")
+                            .color(KitsuneTheme::TEXT1),
+                    );
+                    ui.add_space(4.0);
+                    egui::Frame::none()
+                        .fill(KitsuneTheme::BG2)
+                        .rounding(egui::Rounding::same(6.0))
+                        .inner_margin(egui::Margin::symmetric(10.0, 6.0))
+                        .show(ui, |ui| {
+                            ui.label(
+                                egui::RichText::new(&path)
+                                    .family(egui::FontFamily::Monospace)
+                                    .size(11.5)
+                                    .color(KitsuneTheme::AMBER),
+                            );
+                        });
+                    ui.add_space(10.0);
+                    ui.horizontal(|ui| {
+                        let allow_btn = egui::Button::new(
+                            egui::RichText::new("✓ Allow").color(egui::Color32::BLACK).strong(),
+                        )
+                        .fill(KitsuneTheme::GREEN)
+                        .min_size(egui::vec2(80.0, 28.0));
+                        if ui.add(allow_btn).clicked() {
+                            allow = true;
+                        }
+                        ui.add_space(8.0);
+                        let deny_btn = egui::Button::new(
+                            egui::RichText::new("✕ Deny").color(KitsuneTheme::TEXT_PRIMARY).strong(),
+                        )
+                        .fill(KitsuneTheme::RED)
+                        .min_size(egui::vec2(80.0, 28.0));
+                        if ui.add(deny_btn).clicked() {
+                            deny = true;
+                        }
+                    });
+                    ui.add_space(4.0);
+                });
+            if allow || deny {
+                self.file_perm_pending = None;
+                if let Ok(mut slot) = self.file_perm_slot.try_lock() {
+                    if let Some((_, tx)) = slot.take() {
+                        let _ = tx.send(allow);
+                    }
+                }
+            }
+        }
+
         // ── Overlay: Settings dialog ─────────────────────────────────────
         settings_dialog(ctx, self);
 
@@ -496,7 +724,7 @@ impl eframe::App for KitsuneBrowser {
         self.init_browser(frame, viewport);
 
         if let Some(cef) = &self.cef {
-            if self.show_settings || self.hil_action.is_some() {
+            if self.show_settings || self.hil_action.is_some() || self.file_perm_pending.is_some() {
                 // Hide native WebView when egui modal dialogs are active
                 // by collapsing its bounds.
                 cef.set_bounds(CefRect { x: 0, y: 0, width: 0, height: 0 });

@@ -38,8 +38,8 @@ pub struct AgentSpec {
     pub description: String,
     /// The agent's goal.
     pub goal: AgentGoal,
-    /// The sequence of actions to perform.
-    pub actions: Vec<AgentAction>,
+    /// The sequence of actions to perform (legacy scripted-executor path).
+    pub actions: Vec<ScriptedAction>,
     /// Tools the agent is allowed to use.
     pub allowed_tools: Vec<AgentTool>,
     /// Constraints on what the agent can do.
@@ -56,6 +56,12 @@ pub struct AgentSpec {
     pub created_at: chrono::DateTime<chrono::Utc>,
     /// When this spec was last modified.
     pub modified_at: chrono::DateTime<chrono::Utc>,
+    /// Optional override for the local Ollama endpoint.
+    #[serde(default)]
+    pub ollama_url: Option<String>,
+    /// Optional override for the local Ollama model name.
+    #[serde(default)]
+    pub ollama_model: Option<String>,
 }
 
 /// The agent's goal — what it's trying to accomplish.
@@ -69,10 +75,14 @@ pub struct AgentGoal {
     pub success_criteria: Vec<String>,
 }
 
-/// An action an agent can take.
+/// A pre-scripted action used by the legacy `ScriptedExecutor` demo path.
+///
+/// The runtime LLM agent does not use this enum — it uses
+/// [`crate::action::AgentAction`] instead. This is kept for backwards
+/// compatibility with existing fixture specs and tests.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
-pub enum AgentAction {
+pub enum ScriptedAction {
     Navigate {
         url: String,
     },

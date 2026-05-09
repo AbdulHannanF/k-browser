@@ -224,6 +224,8 @@ pub fn get_system_templates() -> Vec<AgentSpec> {
             version: "1.0.0".to_string(),
             created_at: now,
             modified_at: now,
+            ollama_url: None,
+            ollama_model: None,
         },
         AgentSpec {
             id: AgentId::new(),
@@ -252,6 +254,8 @@ pub fn get_system_templates() -> Vec<AgentSpec> {
             version: "1.0.0".to_string(),
             created_at: now,
             modified_at: now,
+            ollama_url: None,
+            ollama_model: None,
         },
         AgentSpec {
             id: AgentId::new(),
@@ -281,6 +285,8 @@ pub fn get_system_templates() -> Vec<AgentSpec> {
             version: "1.0.0".to_string(),
             created_at: now,
             modified_at: now,
+            ollama_url: None,
+            ollama_model: None,
         },
         AgentSpec {
             id: AgentId::new(),
@@ -308,6 +314,8 @@ pub fn get_system_templates() -> Vec<AgentSpec> {
             version: "1.0.0".to_string(),
             created_at: now,
             modified_at: now,
+            ollama_url: None,
+            ollama_model: None,
         },
         AgentSpec {
             id: AgentId::new(),
@@ -336,6 +344,8 @@ pub fn get_system_templates() -> Vec<AgentSpec> {
             version: "1.0.0".to_string(),
             created_at: now,
             modified_at: now,
+            ollama_url: None,
+            ollama_model: None,
         },
     ]
 }

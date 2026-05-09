@@ -7,7 +7,7 @@
 use kitsune_agent::dom_access::DomAccessor;
 use kitsune_agent::executor::{ScriptedExecutor, WebViewCommand};
 use kitsune_agent::spec::{
-    AgentAction, AgentAuthor, AgentBudget, AgentConstraints, AgentGoal, AgentId, AgentSpec,
+    AgentAuthor, AgentBudget, AgentConstraints, AgentGoal, AgentId, AgentSpec, ScriptedAction,
 };
 use kitsune_hil::HilGate;
 use kitsune_vault::VaultBackend;
@@ -27,10 +27,10 @@ fn build_test_spec() -> AgentSpec {
             success_criteria: vec![],
         },
         actions: vec![
-            AgentAction::Navigate {
+            ScriptedAction::Navigate {
                 url: "https://example.com".to_string(),
             },
-            AgentAction::Wait { ms: 10 },
+            ScriptedAction::Wait { ms: 10 },
         ],
         allowed_tools: vec![],
         constraints: AgentConstraints::default(),
@@ -40,6 +40,8 @@ fn build_test_spec() -> AgentSpec {
         version: "1.0.0".to_string(),
         created_at: now,
         modified_at: now,
+        ollama_url: None,
+        ollama_model: None,
     }
 }
 

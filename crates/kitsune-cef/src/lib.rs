@@ -4,6 +4,7 @@ pub use error::CefError;
 
 use std::collections::HashMap;
 use std::num::NonZeroIsize;
+use std::path::PathBuf;
 use std::sync::mpsc::Sender;
 
 use raw_window_handle::{HasWindowHandle, RawWindowHandle, Win32WindowHandle, WindowHandle};
@@ -24,6 +25,12 @@ pub enum CefEvent {
     PageLoadFinished(String),
     TitleChanged(String),
     IpcMessage(String),
+    /// A page tried to open a new window; the URL to navigate to instead.
+    NewWindowNav(String),
+    /// A file download has started. `save_path` is where it will be written.
+    DownloadStarted { url: String, filename: String, save_path: String },
+    /// A download finished (or failed).
+    DownloadCompleted { url: String, save_path: Option<String>, success: bool },
 }
 
 /// Initialize the embedded browser backend.
@@ -58,13 +65,19 @@ impl CefBrowser {
     ) -> Result<Self, CefError> {
         let parent = ParentWindow::new(parent_hwnd)?;
         let ipc_tx = event_tx.clone();
-        let load_tx = event_tx;
+        let load_tx = event_tx.clone();
+        let new_win_tx = event_tx.clone();
+        let dl_start_tx = event_tx.clone();
+        let dl_done_tx = event_tx;
         let webview = WebViewBuilder::new_as_child(&parent)
             .with_bounds(bounds.into())
             .with_url(url)
             .with_background_color((19, 20, 24, 255))
             .with_devtools(cfg!(debug_assertions))
             .with_browser_accelerator_keys(true)
+            // Redirect window.open() and target="_blank" links back to the same tab so the
+            // agent never loses control to an unreachable popup window.
+            .with_initialization_script(NEW_WINDOW_REDIRECT_JS)
             .with_ipc_handler(move |request| {
                 if let Some(tx) = &ipc_tx {
                     let _ = tx.send(CefEvent::IpcMessage(request.body().to_string()));
@@ -76,6 +89,49 @@ impl CefBrowser {
                         PageLoadEvent::Started => tx.send(CefEvent::PageLoadStarted(url)),
                         PageLoadEvent::Finished => tx.send(CefEvent::PageLoadFinished(url)),
                     };
+                }
+            })
+            // Belt-and-suspenders: block any native new-window request that slips through
+            // the JS override and redirect it as a same-tab navigation.
+            .with_new_window_req_handler(move |url: String| {
+                if let Some(tx) = &new_win_tx {
+                    let _ = tx.send(CefEvent::NewWindowNav(url));
+                }
+                false // block the native popup
+            })
+            // ── Download handling ─────────────────────────────────────────────
+            // Intercept the download start to capture the filename + save path,
+            // then let WebView2 proceed with its default destination.
+            .with_download_started_handler(move |url: String, path: &mut PathBuf| {
+                // Derive a clean filename from the URL, stripping query strings.
+                let raw_name = url
+                    .rsplit('/')
+                    .next()
+                    .unwrap_or("download")
+                    .split('?')
+                    .next()
+                    .unwrap_or("download");
+                let filename = if raw_name.is_empty() {
+                    "download".to_string()
+                } else {
+                    raw_name.to_string()
+                };
+
+                // Override the save path to the user's Downloads folder.
+                let dl_dir = dirs::download_dir()
+                    .unwrap_or_else(|| PathBuf::from("."));
+                *path = dl_dir.join(&filename);
+                let save_path = path.to_string_lossy().to_string();
+
+                if let Some(tx) = &dl_start_tx {
+                    let _ = tx.send(CefEvent::DownloadStarted { url, filename, save_path });
+                }
+                true // allow download
+            })
+            .with_download_completed_handler(move |url: String, path: Option<PathBuf>, success: bool| {
+                let save_path = path.map(|p| p.to_string_lossy().to_string());
+                if let Some(tx) = &dl_done_tx {
+                    let _ = tx.send(CefEvent::DownloadCompleted { url, save_path, success });
                 }
             })
             .build()
@@ -185,6 +241,31 @@ pub enum RequestAction {
     Block,
     Redirect(String),
 }
+
+/// Injected into every page before any site scripts run.
+/// Overrides `window.open` and strips `target="_blank"` on link clicks so that
+/// the agent never loses control to a popup window it cannot observe.
+const NEW_WINDOW_REDIRECT_JS: &str = r#"(function () {
+    // Replace window.open with a same-tab redirect.
+    window.open = function (url) {
+        if (url && url !== 'about:blank') {
+            window.location.href = url;
+        }
+        return { closed: false, focus: function(){}, close: function(){} };
+    };
+    // Intercept every click: if it hits an anchor with a non-self target,
+    // strip the target so the browser navigates in-place.
+    document.addEventListener('click', function (e) {
+        var el = e.target;
+        while (el && el.tagName !== 'A') { el = el.parentElement; }
+        if (el && el.tagName === 'A') {
+            var t = (el.getAttribute('target') || '').toLowerCase();
+            if (t === '_blank' || t === '_new' || t === '_tab') {
+                el.removeAttribute('target');
+            }
+        }
+    }, true);
+})();"#;
 
 impl From<CefRect> for Rect {
     fn from(value: CefRect) -> Self {

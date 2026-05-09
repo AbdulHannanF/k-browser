@@ -26,6 +26,7 @@ image = { workspace = true }
 reqwest = { version = "0.12", features = ["json", "rustls-tls", "stream"] }
 futures = "0.3"
 urlencoding = "2"
+rfd = "0.14"
 
 kitsune-core = { path = "../kitsune-core" }
 kitsune-vault = { path = "../kitsune-vault" }

@@ -28,6 +28,8 @@ pub fn create_from_description(name: &str, description: &str) -> AgentBuilderSta
         version: "0.1.0".to_string(),
         created_at: chrono::Utc::now(),
         modified_at: chrono::Utc::now(),
+        ollama_url: None,
+        ollama_model: None,
     };
 
     let validation_errors = crate::validation::validate_spec(&spec);

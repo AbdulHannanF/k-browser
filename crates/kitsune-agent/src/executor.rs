@@ -1,6 +1,6 @@
 use crate::dom_access::DomAccessor;
 use crate::error::AgentResult;
-use crate::spec::{AgentAction, AgentSpec};
+use crate::spec::{AgentSpec, ScriptedAction};
 use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex};
 use tracing::{error, info};
@@ -39,30 +39,30 @@ impl ScriptedExecutor {
     }
 
     /// Execute a single agent action.
-    async fn execute_action(&self, action: &AgentAction) -> AgentResult<()> {
+    async fn execute_action(&self, action: &ScriptedAction) -> AgentResult<()> {
         let accessor = self.dom_accessor.lock().await;
         match action {
-            AgentAction::Navigate { url } => {
+            ScriptedAction::Navigate { url } => {
                 accessor.navigate(url).await?;
             }
-            AgentAction::QueryText { selector, .. } => {
+            ScriptedAction::QueryText { selector, .. } => {
                 let text = accessor.query_text(selector).await?;
                 info!("Queried text: {:?}", text);
             }
-            AgentAction::QueryLinks { selector, .. } => {
+            ScriptedAction::QueryLinks { selector, .. } => {
                 let links = accessor.query_links(selector).await?;
                 info!("Queried links: {:?}", links);
             }
-            AgentAction::FillField {
+            ScriptedAction::FillField {
                 selector, value, ..
             } => {
                 accessor.fill_field(selector, value).await?;
             }
-            AgentAction::Click { selector, .. } => {
+            ScriptedAction::Click { selector, .. } => {
                 accessor.click_element(selector).await?;
             }
             // Wait action for demo purposes
-            AgentAction::Wait { ms } => {
+            ScriptedAction::Wait { ms } => {
                 tokio::time::sleep(std::time::Duration::from_millis(*ms)).await;
             }
         }

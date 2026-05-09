@@ -48,6 +48,8 @@ pub fn form_autofill_template() -> AgentSpec {
         version: "1.0.0".to_string(),
         created_at: chrono::Utc::now(),
         modified_at: chrono::Utc::now(),
+        ollama_url: None,
+        ollama_model: None,
     }
 }
 
@@ -85,6 +87,8 @@ pub fn subscription_watchdog_template() -> AgentSpec {
         version: "1.0.0".to_string(),
         created_at: chrono::Utc::now(),
         modified_at: chrono::Utc::now(),
+        ollama_url: None,
+        ollama_model: None,
     }
 }
 
@@ -127,6 +131,8 @@ pub fn price_tracker_template() -> AgentSpec {
         version: "1.0.0".to_string(),
         created_at: chrono::Utc::now(),
         modified_at: chrono::Utc::now(),
+        ollama_url: None,
+        ollama_model: None,
     }
 }
 
@@ -166,6 +172,8 @@ pub fn email_unsubscribe_template() -> AgentSpec {
         version: "1.0.0".to_string(),
         created_at: chrono::Utc::now(),
         modified_at: chrono::Utc::now(),
+        ollama_url: None,
+        ollama_model: None,
     }
 }
 
@@ -204,5 +212,7 @@ pub fn login_auditor_template() -> AgentSpec {
         version: "1.0.0".to_string(),
         created_at: chrono::Utc::now(),
         modified_at: chrono::Utc::now(),
+        ollama_url: None,
+        ollama_model: None,
     }
 }
