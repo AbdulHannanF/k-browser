@@ -231,6 +231,20 @@ impl HilPresentation {
                     ConfirmationSeverity::High
                 },
             },
+
+            HilTriggerClass::CaptchaRequired { site, captcha_type } => Self {
+                what_will_happen: format!(
+                    "Your assistant encountered a {} CAPTCHA on {} and needs your help to solve it",
+                    captcha_type, site
+                ),
+                domain_or_service: site.clone(),
+                data_involved: data_labels.to_vec(),
+                cost_display: None,
+                is_reversible: true,
+                alternatives: vec!["Solve the CAPTCHA yourself".to_string()],
+                countdown_seconds: 0,
+                severity: ConfirmationSeverity::Low,
+            },
         }
     }
 }

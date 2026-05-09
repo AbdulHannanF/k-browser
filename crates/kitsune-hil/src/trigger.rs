@@ -151,6 +151,14 @@ pub enum HilTriggerClass {
         /// Whether this action can be reversed.
         reversible: bool,
     },
+
+    /// Agent encountered a CAPTCHA that requires resolution before proceeding.
+    CaptchaRequired {
+        /// The domain where the CAPTCHA was detected.
+        site: String,
+        /// CAPTCHA type (e.g. "recaptcha-v2", "hcaptcha", "cloudflare-turnstile").
+        captcha_type: String,
+    },
 }
 
 impl HilTriggerClass {
@@ -218,6 +226,9 @@ impl HilTriggerClass {
                     format!("{} (cannot be undone)", description)
                 }
             }
+            Self::CaptchaRequired { site, captcha_type } => {
+                format!("CAPTCHA detected on {} ({}). Please solve it to continue.", site, captcha_type)
+            }
         }
     }
 
@@ -232,5 +243,21 @@ impl HilTriggerClass {
                 }
                 | Self::BilledApiCall { .. }
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn captcha_required_summary_contains_site() {
+        let t = HilTriggerClass::CaptchaRequired {
+            site: "daad.de".into(),
+            captcha_type: "recaptcha-v2".into(),
+        };
+        let s = t.plain_language_summary();
+        assert!(s.contains("daad.de"), "summary: {s}");
+        assert!(s.contains("CAPTCHA"), "summary: {s}");
     }
 }
