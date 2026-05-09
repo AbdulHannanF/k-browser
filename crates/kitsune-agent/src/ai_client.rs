@@ -1,3 +1,10 @@
+//! Provider-agnostic AI client for agent sub-tasks.
+//!
+//! ARCHITECTURE: This crate cannot depend on `kitsune-ai` (circular dep —
+//! kitsune-ai imports BudgetTracker from kitsune-agent). AgentAiClient
+//! makes direct HTTP calls to Ollama or OpenAI-compatible endpoints.
+//! The reqwest::Client is reused across calls — never constructed per-request.
+
 use crate::error::{AgentError, AgentResult};
 use serde::{Deserialize, Serialize};
 
@@ -35,10 +42,28 @@ impl Default for ModelSlots {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub enum AiProviderConfig {
     Ollama { url: String, slots: ModelSlots },
     OpenAiCompatible { url: String, api_key: String, slots: ModelSlots },
+}
+
+impl std::fmt::Debug for AiProviderConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Ollama { url, slots } => f
+                .debug_struct("Ollama")
+                .field("url", url)
+                .field("slots", slots)
+                .finish(),
+            Self::OpenAiCompatible { url, slots, .. } => f
+                .debug_struct("OpenAiCompatible")
+                .field("url", url)
+                .field("api_key", &"[REDACTED]")
+                .field("slots", slots)
+                .finish(),
+        }
+    }
 }
 
 impl AiProviderConfig {
@@ -125,14 +150,23 @@ impl AgentAiClient {
         match &self.config {
             AiProviderConfig::Ollama { url, .. } => {
                 let model = self.config.model_for(tier);
+                let base = url.trim_end_matches('/');
                 let body = OllamaRequest { model, prompt, stream: false };
                 let resp = self
                     .http
-                    .post(format!("{}/api/generate", url))
+                    .post(format!("{}/api/generate", base))
                     .json(&body)
                     .send()
                     .await
                     .map_err(|e| AgentError::ExecutionError(e.to_string()))?;
+                let status = resp.status();
+                if !status.is_success() {
+                    let body = resp.text().await.unwrap_or_default();
+                    return Err(AgentError::ExecutionError(format!(
+                        "provider returned HTTP {}: {}",
+                        status, body
+                    )));
+                }
                 let parsed: OllamaResponse = resp
                     .json()
                     .await
@@ -141,6 +175,7 @@ impl AgentAiClient {
             }
             AiProviderConfig::OpenAiCompatible { url, api_key, .. } => {
                 let model = self.config.model_for(tier);
+                let base = url.trim_end_matches('/');
                 let body = OpenAiRequest {
                     model,
                     messages: vec![OpenAiMessage { role: "user", content: prompt }],
@@ -148,12 +183,20 @@ impl AgentAiClient {
                 };
                 let resp = self
                     .http
-                    .post(format!("{}/v1/chat/completions", url))
+                    .post(format!("{}/v1/chat/completions", base))
                     .bearer_auth(api_key)
                     .json(&body)
                     .send()
                     .await
                     .map_err(|e| AgentError::ExecutionError(e.to_string()))?;
+                let status = resp.status();
+                if !status.is_success() {
+                    let body = resp.text().await.unwrap_or_default();
+                    return Err(AgentError::ExecutionError(format!(
+                        "provider returned HTTP {}: {}",
+                        status, body
+                    )));
+                }
                 let parsed: OpenAiResponse = resp
                     .json()
                     .await

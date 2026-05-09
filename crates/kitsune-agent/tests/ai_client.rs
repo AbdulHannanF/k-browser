@@ -1,4 +1,4 @@
-use kitsune_agent::ai_client::{AgentAiClient, AiProviderConfig, ModelSlots, ModelTier};
+use kitsune_agent::ai_client::{ModelSlots, ModelTier};
 
 #[test]
 fn model_slots_selects_correct_model() {
@@ -9,4 +9,5 @@ fn model_slots_selects_correct_model() {
     };
     assert_eq!(slots.model_for(ModelTier::Fast), "llama3:8b");
     assert_eq!(slots.model_for(ModelTier::Orchestrator), "llama3:70b");
+    assert_eq!(slots.model_for(ModelTier::Worker), "llama3:70b");
 }

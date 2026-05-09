@@ -12,6 +12,7 @@
 
 pub mod action;
 pub mod ai_client;
+pub use ai_client::{AgentAiClient, AiProviderConfig, ModelSlots, ModelTier};
 pub mod budget;
 pub mod dom_access;
 pub mod dom_observer;
