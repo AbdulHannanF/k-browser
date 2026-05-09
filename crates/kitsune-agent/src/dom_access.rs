@@ -160,8 +160,8 @@ impl DomAccessor {
         self.vault.request_access(field_id, &context).await?;
 
         // 3. Inject the approved value into the live WebView.
-        let safe_value = value.replace('\'', "\\'").replace('\\', "\\\\");
-        let safe_field = field_id.replace('\'', "\\'");
+        let safe_value = value.replace('\\', "\\\\").replace('\'', "\\'");
+        let safe_field = field_id.replace('\\', "\\\\").replace('\'', "\\'");
         let script = format!(
             r#"
             (function() {{
