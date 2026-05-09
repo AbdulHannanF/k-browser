@@ -2,6 +2,7 @@ use crate::error::{AgentError, AgentResult};
 use crate::executor::WebViewCommand;
 use kitsune_hil::{HilGate, HilTriggerClass};
 use kitsune_vault::{types::VaultCategory, RequestContext, RequesterId, VaultBackend, VaultKey};
+use rand::Rng;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio::sync::Mutex;
@@ -97,14 +98,14 @@ impl DomAccessor {
     /// Pause for a randomised human-like duration (80–180 ms).
     /// Called before every field fill and click to evade bot-detection heuristics.
     async fn human_delay(&self) {
-        use rand::Rng;
         let ms = rand::thread_rng().gen_range(80u64..=180);
         tokio::time::sleep(std::time::Duration::from_millis(ms)).await;
     }
 
     /// Inject a synthetic mousemove event near the target element.
     async fn inject_mouse_move(&self, selector: &str) -> AgentResult<()> {
-        let safe = selector.replace('\'', "\\'");
+        // Backslashes must be escaped before single-quotes to prevent JS injection.
+        let safe = selector.replace('\\', "\\\\").replace('\'', "\\'");
         let script = format!(
             r#"(function(){{
                 let el = document.querySelector('{safe}');
@@ -265,10 +266,20 @@ impl DomAccessor {
 #[cfg(test)]
 mod tests {
     #[test]
-    fn human_delay_range_is_valid() {
-        let min = 80u64;
-        let max = 180u64;
-        assert!(min < max);
-        assert!(max <= 500, "delay should not be so long it breaks tests");
+    fn selector_escaping_prevents_js_injection() {
+        // Backslash must be doubled before single-quote escaping to prevent injection.
+        // A selector like foo\'bar would produce foo\\'bar (breaking JS string) if
+        // quote is escaped first. Correct order: backslash first, then quote.
+        let tricky = r"foo\'bar";
+        let safe = tricky.replace('\\', "\\\\").replace('\'', "\\'");
+        assert!(
+            safe.starts_with("foo\\\\"),
+            "backslash was not doubled before quote escape: {safe}"
+        );
+
+        // Plain single-quote must be escaped.
+        let with_quote = "input[type='text']";
+        let safe2 = with_quote.replace('\\', "\\\\").replace('\'', "\\'");
+        assert!(safe2.contains("\\'"), "single-quote not escaped: {safe2}");
     }
 }
