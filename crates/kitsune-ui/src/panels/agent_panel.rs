@@ -406,7 +406,7 @@ fn paint_separator(ui: &mut egui::Ui) {
     ui.allocate_exact_size(egui::vec2(0.0, 1.0), egui::Sense::hover());
 }
 
-// ── In-process agent execution (Ollama-driven) ────────────────────────────────
+// ── In-process agent execution (LLM-driven — Ollama or cloud provider) ──────────
 
 fn start_agent_run(browser: &mut KitsuneBrowser) {
     browser.agent_state = AgentRunState::Running;
@@ -448,6 +448,7 @@ fn start_agent_run(browser: &mut KitsuneBrowser) {
     let endpoint = browser.settings_endpoint.trim().to_string();
     let model = browser.settings_model.trim().to_string();
     let api_key = browser.settings_api_key.clone();
+    let preset = browser.settings_cloud_preset;
     let ai_config = match browser.settings_provider {
         SettingsProvider::Ollama => {
             let url = if endpoint.is_empty() {
@@ -462,7 +463,21 @@ fn start_agent_run(browser: &mut KitsuneBrowser) {
             }
         }
         SettingsProvider::Cloud => {
-            let m = if model.is_empty() { "gpt-4o-mini".to_string() } else { model };
+            if endpoint.is_empty() {
+                browser.push_log(
+                    "Cloud endpoint is not set — open Settings → LLM and enter the API base URL",
+                    LogLevel::Block,
+                );
+                browser.agent_state = AgentRunState::Idle;
+                return;
+            }
+            // Fall back to the active preset's default model so Claude/Gemini/Groq users
+            // don't get an OpenAI-specific model name when they leave the field empty.
+            let m = if model.is_empty() {
+                preset.default_model().to_string()
+            } else {
+                model
+            };
             AiProviderConfig::OpenAiCompatible {
                 url: endpoint,
                 api_key,
@@ -511,8 +526,10 @@ fn start_agent_run(browser: &mut KitsuneBrowser) {
 fn build_runtime_spec(browser: &KitsuneBrowser) -> AgentSpec {
     let now = chrono::Utc::now();
 
-    // Settings panel can override the Ollama endpoint and model. We treat
-    // the Ollama provider as the only in-process backend for now.
+    // Settings panel drives both the AiProviderConfig (built in start_agent_run) and
+    // the AgentSpec compat fields below. ollama_url/ollama_model on the spec are
+    // legacy fields used only by LlmAgentRuntime::new; they are ignored when
+    // new_with_config is called.
     let endpoint = browser.settings_endpoint.trim();
     let model = browser.settings_model.trim();
 
