@@ -1,4 +1,5 @@
-use crate::app::{AgentRunState, AgentSseAction, AttachedFile, KitsuneBrowser, LogLevel};
+use crate::app::{AgentRunState, AgentSseAction, AttachedFile, KitsuneBrowser, LogLevel, SettingsProvider};
+use kitsune_agent::ai_client::{AiProviderConfig, ModelSlots};
 use crate::panels::agent_card::{AgentCard, AgentStatus};
 use crate::theme::KitsuneTheme;
 use eframe::egui;
@@ -444,6 +445,32 @@ fn start_agent_run(browser: &mut KitsuneBrowser) {
     let stop_flag = browser.agent_stop_flag.clone();
     let spec = build_runtime_spec(browser);
 
+    let endpoint = browser.settings_endpoint.trim().to_string();
+    let model = browser.settings_model.trim().to_string();
+    let api_key = browser.settings_api_key.clone();
+    let ai_config = match browser.settings_provider {
+        SettingsProvider::Ollama => {
+            let url = if endpoint.is_empty() {
+                "http://localhost:11434".to_string()
+            } else {
+                endpoint
+            };
+            let m = if model.is_empty() { "llama3".to_string() } else { model };
+            AiProviderConfig::Ollama {
+                url,
+                slots: ModelSlots { orchestrator: m.clone(), worker: m.clone(), fast: m },
+            }
+        }
+        SettingsProvider::Cloud => {
+            let m = if model.is_empty() { "gpt-4o-mini".to_string() } else { model };
+            AiProviderConfig::OpenAiCompatible {
+                url: endpoint,
+                api_key,
+                slots: ModelSlots { orchestrator: m.clone(), worker: m.clone(), fast: m },
+            }
+        }
+    };
+
     // Build context from any attached files.
     let context = if browser.attached_files.is_empty() {
         String::new()
@@ -457,7 +484,7 @@ fn start_agent_run(browser: &mut KitsuneBrowser) {
     };
 
     browser.runtime().spawn(async move {
-        run_in_process_agent(spec, cmd, context, vault, hil_gate, webview_tx, agent_tx, file_perm_slot, stop_flag).await;
+        run_in_process_agent(spec, ai_config, cmd, context, vault, hil_gate, webview_tx, agent_tx, file_perm_slot, stop_flag).await;
     });
 
     // ── Orchestrator parallel path ────────────────────────────────────────
@@ -531,6 +558,7 @@ fn build_runtime_spec(browser: &KitsuneBrowser) -> AgentSpec {
 
 async fn run_in_process_agent(
     spec: AgentSpec,
+    ai_config: AiProviderConfig,
     prompt: String,
     context: String,
     vault: std::sync::Arc<kitsune_vault::VaultBackend>,
@@ -542,7 +570,7 @@ async fn run_in_process_agent(
 ) {
     let (events_tx, mut events_rx) = tokio::sync::mpsc::unbounded_channel::<AgentEvent>();
 
-    let runtime = LlmAgentRuntime::new(spec, webview_tx, vault, hil_gate)
+    let runtime = LlmAgentRuntime::new_with_config(spec, ai_config, webview_tx, vault, hil_gate)
         .with_event_sink(events_tx)
         .with_file_perm_slot(file_perm_slot)
         .with_stop_flag(stop_flag);
