@@ -2,9 +2,11 @@
 
 A privacy-first, agentic desktop browser built in Rust. Runs an `egui` native shell over an embedded WebView2 surface (via `wry`) and gives the user an in-browser AI agent that can navigate, read DOM, and fill forms — with every consequential action gated behind a non-bypassable Human-in-the-Loop (HIL) approval flow.
 
-Sensitive data lives in a local `age`-encrypted vault keyed off Argon2id. Agents only ever receive opaque token handles — never raw secrets.
+Sensitive data lives in a local `age`-encrypted vault keyed off Argon2id. Agents only ever receive opaque token handles, never raw secrets.
 
 ---
+
+<img width="1919" height="1028" alt="image" src="https://github.com/user-attachments/assets/963872e3-2cef-425c-990d-78a9f783eb4f" />
 
 ## Core Philosophy
 
@@ -61,11 +63,14 @@ kitsune-engine/
 
 ---
 
+<img width="1919" height="1015" alt="image" src="https://github.com/user-attachments/assets/c53f04e1-338c-425e-a4c3-a89e45bec70d" />
+
 ## UI
 
 Dark cyberpunk theme. All colors, spacing, and font sizes come from `theme::{colors, spacing, fonts}` — never hardcoded.
 
 **Animation primitives** (`animation.rs`):
+
 - `lerp_anim` — smooth per-widget float toward a target, state in `egui::Context::data`.
 - `pulse_anim` — sine-wave pulse [0, 1] at configurable Hz.
 - `spinner_char` — braille spinner at ~10 fps.
@@ -104,17 +109,7 @@ Cloud auth token lives in the OS keychain (`kitsune-engine / cloud-token`), not 
 cargo run -p kitsune-ui
 
 # Release build
-cargo build --release -p kitsune-ui
-
-# Offline demo server (also auto-started by the browser on 127.0.0.1:7700)
-cargo run -p kitsune-cloud-mock
-
-# Per-crate tests
-cargo test -p kitsune-vault
-cargo test --workspace
-
-# Regenerate app icon (requires Python + Pillow)
-python gen_icon.py
+cargo build --release
 
 # Local-model AI (Pro tier, pulls candle stack)
 cargo build -p kitsune-ai --features local-model
