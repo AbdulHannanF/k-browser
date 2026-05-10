@@ -4,7 +4,7 @@
 //! Each turn:
 //!   1. Inject [`crate::dom_observer::observation_script`] into the live
 //!      WebView and parse the resulting [`ObservedPage`].
-//!   2. Ask the local Ollama daemon for the next [`AgentAction`].
+//!   2. Ask the configured LLM backend (Ollama or cloud provider) for the next [`AgentAction`].
 //!   3. Execute it through `DomAccessor` / `HilGate`.
 //!   4. Append the action and the next observation to the chat history.
 //!
@@ -54,6 +54,8 @@ impl LlmBackend {
                     "messages": messages,
                     "max_tokens": 4096,
                 });
+                // `url` is a versioned base (e.g. https://api.openai.com/v1);
+                // preset endpoints already include the version path.
                 let resp = client
                     .post(format!("{}/chat/completions", url.trim_end_matches('/')))
                     .bearer_auth(api_key)
@@ -73,9 +75,22 @@ impl LlmBackend {
                 let status = resp.status();
                 if !status.is_success() {
                     let text = resp.text().await.unwrap_or_default();
-                    return Err(AgentError::ExecutionError(format!(
-                        "Cloud LLM returned HTTP {}: {}", status, text
-                    )));
+                    let msg = if status.as_u16() == 401 || status.as_u16() == 403 {
+                        format!(
+                            "Cloud LLM rejected the API key (HTTP {}). \
+                             Check your key in Settings → LLM → API Key. Detail: {}",
+                            status, text
+                        )
+                    } else if status.as_u16() == 429 {
+                        format!(
+                            "Cloud LLM rate limit reached (HTTP 429). \
+                             Wait a moment and try again. Detail: {}",
+                            text
+                        )
+                    } else {
+                        format!("Cloud LLM returned HTTP {}: {}", status, text)
+                    };
+                    return Err(AgentError::ExecutionError(msg));
                 }
 
                 let parsed: serde_json::Value = resp
@@ -176,7 +191,7 @@ impl LlmAgentRuntime {
                     .use_rustls_tls()
                     .timeout(std::time::Duration::from_secs(120))
                     .build()
-                    .unwrap_or_else(|_| reqwest::Client::new());
+                    .expect("failed to build rustls HTTP client");
                 LlmBackend::Cloud { client, url, api_key, model: slots.worker }
             }
         };
