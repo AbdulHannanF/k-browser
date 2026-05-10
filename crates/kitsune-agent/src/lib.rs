@@ -14,6 +14,8 @@ pub mod action;
 pub mod agents;
 pub mod ai_client;
 pub mod captcha;
+pub mod orchestrator;
+pub use orchestrator::{AgentOrchestrator, SubTask, TaskStatus};
 pub use captcha::{CaptchaAgent, CaptchaKind, CaptchaSolverConfig};
 pub use ai_client::{AgentAiClient, AiProviderConfig, ModelSlots, ModelTier};
 pub mod budget;
