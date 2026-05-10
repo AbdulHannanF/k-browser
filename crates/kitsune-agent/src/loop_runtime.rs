@@ -14,6 +14,7 @@
 //! observed values (we strip element values for password/cc fields below).
 
 use crate::action::{parse_action_json, AgentAction};
+use crate::ai_client::AiProviderConfig;
 use crate::dom_observer::{observation_script, ObservedElement, ObservedPage};
 use crate::error::AgentError;
 use crate::executor::WebViewCommand;
@@ -26,6 +27,70 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::sync::{mpsc, oneshot};
 use tracing::{info, warn};
+
+enum LlmBackend {
+    Ollama(OllamaClient),
+    Cloud {
+        client: reqwest::Client,
+        url: String,
+        api_key: String,
+        model: String,
+    },
+}
+
+impl LlmBackend {
+    async fn chat(&self, system: &str, history: Vec<(String, String)>) -> Result<String, AgentError> {
+        match self {
+            Self::Ollama(ollama) => ollama.chat(system, history).await,
+            Self::Cloud { client, url, api_key, model } => {
+                let mut messages = vec![
+                    serde_json::json!({"role": "system", "content": system}),
+                ];
+                for (role, content) in &history {
+                    messages.push(serde_json::json!({"role": role, "content": content}));
+                }
+                let body = serde_json::json!({
+                    "model": model,
+                    "messages": messages,
+                    "max_tokens": 4096,
+                });
+                let resp = client
+                    .post(format!("{}/chat/completions", url.trim_end_matches('/')))
+                    .bearer_auth(api_key)
+                    .json(&body)
+                    .send()
+                    .await
+                    .map_err(|e| {
+                        if e.is_connect() || e.is_timeout() {
+                            AgentError::LlmUnavailable(format!(
+                                "LLM not responding at {}: {}", url, e
+                            ))
+                        } else {
+                            AgentError::ExecutionError(format!("Cloud LLM request failed: {}", e))
+                        }
+                    })?;
+
+                let status = resp.status();
+                if !status.is_success() {
+                    let text = resp.text().await.unwrap_or_default();
+                    return Err(AgentError::ExecutionError(format!(
+                        "Cloud LLM returned HTTP {}: {}", status, text
+                    )));
+                }
+
+                let parsed: serde_json::Value = resp
+                    .json()
+                    .await
+                    .map_err(|e| AgentError::ExecutionError(format!("Cloud LLM bad JSON: {}", e)))?;
+
+                parsed["choices"][0]["message"]["content"]
+                    .as_str()
+                    .map(|s| s.to_string())
+                    .ok_or_else(|| AgentError::ExecutionError("empty cloud LLM response".into()))
+            }
+        }
+    }
+}
 
 /// Shared slot for the file-access permission handshake.
 /// The agent writes `(path, oneshot_tx)` here and waits; the UI reads the
@@ -56,7 +121,7 @@ pub enum AgentEvent {
 /// LLM-driven runtime. One instance per `run()` invocation.
 pub struct LlmAgentRuntime {
     spec: AgentSpec,
-    ollama: OllamaClient,
+    backend: LlmBackend,
     hil_gate: Arc<HilGate>,
     #[allow(dead_code)]
     vault: Arc<VaultBackend>,
@@ -81,10 +146,43 @@ impl LlmAgentRuntime {
             .ollama_model
             .clone()
             .unwrap_or_else(|| DEFAULT_OLLAMA_MODEL.to_string());
-        let ollama = OllamaClient::new(base_url, model);
+        let backend = LlmBackend::Ollama(OllamaClient::new(base_url, model));
         Self {
             spec,
-            ollama,
+            backend,
+            hil_gate,
+            vault,
+            webview_tx,
+            events: None,
+            file_perm_slot: None,
+            stop_flag: None,
+        }
+    }
+
+    /// Construct with an explicit provider config so the UI can pass cloud credentials.
+    pub fn new_with_config(
+        spec: AgentSpec,
+        config: AiProviderConfig,
+        webview_tx: mpsc::Sender<WebViewCommand>,
+        vault: Arc<VaultBackend>,
+        hil_gate: Arc<HilGate>,
+    ) -> Self {
+        let backend = match config {
+            AiProviderConfig::Ollama { url, slots } => {
+                LlmBackend::Ollama(OllamaClient::new(url, slots.worker))
+            }
+            AiProviderConfig::OpenAiCompatible { url, api_key, slots } => {
+                let client = reqwest::Client::builder()
+                    .use_rustls_tls()
+                    .timeout(std::time::Duration::from_secs(120))
+                    .build()
+                    .unwrap_or_else(|_| reqwest::Client::new());
+                LlmBackend::Cloud { client, url, api_key, model: slots.worker }
+            }
+        };
+        Self {
+            spec,
+            backend,
             hil_gate,
             vault,
             webview_tx,
@@ -174,7 +272,7 @@ impl LlmAgentRuntime {
 
             // 2. Ask the model.
             let system = build_system_prompt(&self.spec);
-            let raw = match self.ollama.chat(&system, history.clone()).await {
+            let raw = match self.backend.chat(&system, history.clone()).await {
                 Ok(r) => r,
                 Err(AgentError::LlmUnavailable(msg)) => {
                     warn!(target: "kitsune::agent_loop", "LLM unavailable: {}", msg);
@@ -197,7 +295,10 @@ impl LlmAgentRuntime {
                         }
                     }
                     let err_msg = format!(
-                        "LLM unavailable and task requires reasoning. Start Ollama (`ollama serve`) or configure an API key. Detail: {}",
+                        "LLM unavailable and task requires reasoning. \
+                         For local models, run `ollama serve`. \
+                         For cloud providers, check your API key and endpoint in Settings. \
+                         Detail: {}",
                         msg
                     );
                     self.emit(AgentEvent::Error(err_msg.clone()));
@@ -713,5 +814,28 @@ fn normalize_url(url: &str) -> String {
         "https://www.google.com".to_string()
     } else {
         format!("https://{}", u)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn llm_backend_cloud_variant_constructs() {
+        let client = reqwest::Client::new();
+        let backend = LlmBackend::Cloud {
+            client,
+            url: "https://api.openai.com/v1".to_string(),
+            api_key: "sk-test".to_string(),
+            model: "gpt-4o-mini".to_string(),
+        };
+        assert!(matches!(backend, LlmBackend::Cloud { .. }));
+    }
+
+    #[test]
+    fn llm_backend_ollama_variant_constructs() {
+        let backend = LlmBackend::Ollama(OllamaClient::default_local());
+        assert!(matches!(backend, LlmBackend::Ollama(_)));
     }
 }
