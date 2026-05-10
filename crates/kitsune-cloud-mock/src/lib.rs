@@ -353,6 +353,135 @@ async fn handle_hil_response(
 }
 
 // ---------------------------------------------------------------------------
+// Swarm-plan demo endpoint
+// ---------------------------------------------------------------------------
+
+#[derive(Deserialize)]
+struct SwarmPlanInput {
+    goal: String,
+    #[serde(default)]
+    mode: String,
+    #[serde(default = "default_swarm_workers")]
+    max_workers: usize,
+}
+
+fn default_swarm_workers() -> usize { 3 }
+
+/// POST /api/swarm-plan — demo SSE stream that simulates a swarm run.
+async fn swarm_plan(Json(input): Json<SwarmPlanInput>) -> Response {
+    let goal = input.goal;
+    let max_workers = input.max_workers.min(10).max(1);
+
+    let stream = async_stream::stream! {
+        // Coordinator planning
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        let update = serde_json::json!({
+            "type": "SwarmUpdate",
+            "swarm_id": "demo-swarm",
+            "worker_id": "coordinator",
+            "role": "Coordinator",
+            "status": "Running",
+            "message": "Decomposing goal into parallel tasks...",
+            "tool_calls_used": 0u32
+        });
+        yield Ok::<_, std::convert::Infallible>(
+            Event::default().event("swarm").data(update.to_string())
+        );
+
+        // Plan ready — emit N fake tasks
+        tokio::time::sleep(std::time::Duration::from_millis(800)).await;
+        let roles = ["Researcher", "Analyst", "Skeptic", "FactChecker", "Writer"];
+        let tasks: Vec<serde_json::Value> = (0..max_workers).map(|i| {
+            serde_json::json!({
+                "id": format!("task-{}", i),
+                "role": roles[i % roles.len()],
+                "prompt": format!("Investigate aspect {} of: {}", i + 1, goal),
+                "depends_on": [],
+                "status": "Pending",
+                "worker_id": null,
+                "tool_calls_used": 0u32,
+                "last_message": null
+            })
+        }).collect();
+        let plan = serde_json::json!({
+            "type": "SwarmPlanReady",
+            "swarm_id": "demo-swarm",
+            "goal": goal.clone(),
+            "tasks": tasks.clone()
+        });
+        yield Ok(Event::default().event("swarm").data(plan.to_string()));
+
+        // Workers starting
+        for (i, task) in tasks.iter().enumerate() {
+            tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+            let role = task["role"].as_str().unwrap_or("Worker");
+            let running = serde_json::json!({
+                "type": "SwarmUpdate",
+                "swarm_id": "demo-swarm",
+                "worker_id": format!("worker-{}-{}", role.to_lowercase(), i),
+                "role": role,
+                "status": "Running",
+                "message": "Searching for information...",
+                "tool_calls_used": 0u32
+            });
+            yield Ok(Event::default().event("swarm").data(running.to_string()));
+        }
+
+        // Workers completing
+        for (i, task) in tasks.iter().enumerate() {
+            tokio::time::sleep(std::time::Duration::from_millis(600)).await;
+            let role = task["role"].as_str().unwrap_or("Worker");
+            let done = serde_json::json!({
+                "type": "SwarmUpdate",
+                "swarm_id": "demo-swarm",
+                "worker_id": format!("worker-{}-{}", role.to_lowercase(), i),
+                "role": role,
+                "status": "Completed",
+                "message": format!("{} found {} relevant data points.", role, (i + 1) * 3),
+                "tool_calls_used": (i as u32) + 2
+            });
+            yield Ok(Event::default().event("swarm").data(done.to_string()));
+        }
+
+        // Synthesis
+        tokio::time::sleep(std::time::Duration::from_millis(800)).await;
+        let synthesizing = serde_json::json!({
+            "type": "SwarmUpdate",
+            "swarm_id": "demo-swarm",
+            "worker_id": "coordinator",
+            "role": "Coordinator",
+            "status": "Running",
+            "message": "Reconciling all perspectives into final synthesis...",
+            "tool_calls_used": 0u32
+        });
+        yield Ok(Event::default().event("swarm").data(synthesizing.to_string()));
+
+        tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+        let final_answer = format!(
+            "## Swarm Analysis: {}\n\n**Agreement:** All {} agents confirmed the topic is well-documented.\n\n**Key Findings:**\n- Researcher: Found primary sources\n- Analyst: Identified trends\n- Skeptic: Challenged assumptions\n\n**Conclusion:** Comprehensive analysis complete.",
+            goal, max_workers
+        );
+        let swarm_done = serde_json::json!({
+            "type": "SwarmDone",
+            "swarm_id": "demo-swarm",
+            "final_answer": final_answer,
+            "total_tool_calls": (max_workers * 3) as u32
+        });
+        yield Ok(Event::default().event("swarm").data(swarm_done.to_string()));
+
+        yield Ok(Event::default().event("done").data("{}"));
+    };
+
+    Sse::new(stream)
+        .keep_alive(
+            axum::response::sse::KeepAlive::new()
+                .interval(std::time::Duration::from_secs(15))
+                .text("ping"),
+        )
+        .into_response()
+}
+
+// ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
@@ -376,6 +505,7 @@ pub fn router() -> Router {
         .route("/api/settings", get(get_settings).post(save_settings))
         .route("/api/agent-run", post(agent_run))
         .route("/api/hil-response", post(handle_hil_response))
+        .route("/api/swarm-plan", post(swarm_plan))
         .with_state(state)
         .layer(CorsLayer::permissive())
 }
