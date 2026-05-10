@@ -186,6 +186,7 @@ pub struct KitsuneBrowser {
     pub show_settings: bool,
     pub settings_tab: SettingsTab,
     pub settings_provider: SettingsProvider,
+    pub settings_cloud_preset: CloudPreset,
     pub settings_api_key: String,
     pub settings_endpoint: String,
     pub settings_model: String,
@@ -236,14 +237,71 @@ pub enum SettingsTab {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SettingsProvider {
-    OpenAiCompatible,
+    Cloud,
     Ollama,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum CloudPreset {
+    #[default]
+    Claude,
+    OpenAI,
+    Gemini,
+    Groq,
+    OpenRouter,
+    Custom,
+}
+
+impl CloudPreset {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Claude => "Claude",
+            Self::OpenAI => "OpenAI",
+            Self::Gemini => "Gemini",
+            Self::Groq => "Groq",
+            Self::OpenRouter => "OpenRouter",
+            Self::Custom => "Custom",
+        }
+    }
+
+    pub fn default_endpoint(self) -> &'static str {
+        match self {
+            Self::Claude => "https://api.anthropic.com/v1",
+            Self::OpenAI => "https://api.openai.com/v1",
+            Self::Gemini => "https://generativelanguage.googleapis.com/v1beta/openai",
+            Self::Groq => "https://api.groq.com/openai/v1",
+            Self::OpenRouter => "https://openrouter.ai/api/v1",
+            Self::Custom => "",
+        }
+    }
+
+    pub fn default_model(self) -> &'static str {
+        match self {
+            Self::Claude => "claude-3-5-sonnet-20241022",
+            Self::OpenAI => "gpt-4o-mini",
+            Self::Gemini => "gemini-2.0-flash",
+            Self::Groq => "llama-3.3-70b-versatile",
+            Self::OpenRouter => "anthropic/claude-3.5-sonnet",
+            Self::Custom => "",
+        }
+    }
+
+    pub fn key_hint(self) -> &'static str {
+        match self {
+            Self::Claude => "sk-ant-api03-…",
+            Self::OpenAI => "sk-…",
+            Self::Gemini => "AIza…",
+            Self::Groq => "gsk_…",
+            Self::OpenRouter => "sk-or-…",
+            Self::Custom => "your-api-key",
+        }
+    }
 }
 
 impl SettingsProvider {
     pub fn wire_value(&self) -> &'static str {
         match self {
-            Self::OpenAiCompatible => "open_ai_compatible",
+            Self::Cloud => "open_ai_compatible",
             Self::Ollama => "ollama",
         }
     }
@@ -382,6 +440,7 @@ impl KitsuneBrowser {
             show_settings: false,
             settings_tab: SettingsTab::Llm,
             settings_provider: SettingsProvider::Ollama,
+            settings_cloud_preset: CloudPreset::default(),
             settings_api_key: String::new(),
             settings_endpoint: "http://localhost:11434".to_string(),
             settings_model: "llama3".to_string(),
@@ -1114,5 +1173,41 @@ mod tests {
     fn budget_fraction_correct() {
         let budget = BudgetState { used: 35, total: 100 };
         assert!((budget.fraction() - 0.35).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn cloud_preset_named_endpoints_use_https() {
+        for preset in [
+            CloudPreset::Claude,
+            CloudPreset::OpenAI,
+            CloudPreset::Gemini,
+            CloudPreset::Groq,
+            CloudPreset::OpenRouter,
+        ] {
+            assert!(
+                preset.default_endpoint().starts_with("https://"),
+                "{:?} should use HTTPS",
+                preset
+            );
+        }
+    }
+
+    #[test]
+    fn cloud_preset_custom_has_empty_endpoint() {
+        assert_eq!(CloudPreset::Custom.default_endpoint(), "");
+    }
+
+    #[test]
+    fn cloud_preset_key_hints_are_nonempty() {
+        for preset in [
+            CloudPreset::Claude,
+            CloudPreset::OpenAI,
+            CloudPreset::Gemini,
+            CloudPreset::Groq,
+            CloudPreset::OpenRouter,
+            CloudPreset::Custom,
+        ] {
+            assert!(!preset.key_hint().is_empty(), "{:?} must have a key hint", preset);
+        }
     }
 }
