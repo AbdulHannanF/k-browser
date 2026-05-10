@@ -11,9 +11,14 @@ Cargo workspace, resolver = "2", edition 2021, MSRV 1.75. Single binary target: 
 ```
 kitsune-engine/
 ├── Cargo.toml                     # workspace root (12 members)
+├── kitsune.ico                    # multi-size Windows/taskbar icon (16–256px)
 └── crates/
     ├── kitsune-core               # Broker process — orchestrator, owns vault/HIL/IPC
     ├── kitsune-ui                 # egui native shell + main `kitsune` binary
+    │   └── assets/
+    │       ├── kitsune-icon.png   # 256×256 RGBA fox icon (baked into binary via include_bytes!)
+    │       ├── Inter-Regular.ttf  # UI font (loaded at runtime from this path)
+    │       └── JetBrainsMono-Regular.ttf
     ├── kitsune-cef                # WebView2 host via `wry` (legacy crate name; not actual CEF)
     ├── kitsune-agent              # LLM agent loop, AgentSpec, AgentRuntime, orchestrator, profile
     ├── kitsune-agent-builder      # No-code AgentSpec construction + validation
@@ -90,18 +95,105 @@ In the multi-process target, steps 5 and 10 cross process boundaries via the nam
 
 | Module | Contents |
 |---|---|
-| `app.rs` | `KitsuneBrowser` (main state), `AgentRunState`, `LogLevel` (Info/Ok/Warn/Block/Cmd/**Step**/**Think**), `LogEntry`, `AgentSseAction`, `AttachedFile`, `DownloadItem`, `SettingsProvider`, `CloudPreset`, `SettingsTab` |
-| `chrome/top_bar.rs` | Address bar, tab controls, privacy indicator |
-| `chrome/tab_bar.rs` | Tab strip |
-| `panels/agent_panel.rs` | Agent workspace panel, card selection, `start_agent_run`, log rendering, specialist context |
-| `panels/agent_card.rs` | `AgentCard`, `AgentStatus` — clickable card with selection highlight |
-| `panels/session_panel.rs` | Right-side session info panel (profile + task graph) |
+| `main.rs` | Entry point. Loads `kitsune-icon.png` via `include_bytes!` → `egui::IconData`, passes to `ViewportBuilder::with_icon`. CEF init, tracing init, `eframe::run_native`. |
+| `app.rs` | `KitsuneBrowser` (main state), `AgentRunState`, `LogLevel` (Info/Ok/Warn/Block/Cmd/Step/Think), `LogEntry`, `AgentSseAction`, `AttachedFile`, `DownloadItem`, `SettingsProvider`, `CloudPreset`, `SettingsTab` |
+| `animation.rs` | `lerp_anim(ctx, id, target, speed)` — per-widget smooth float stored in `ctx.data` temp; `pulse_anim(ctx, id, hz)` — sine-wave pulse [0, 1]; `spinner_char(ctx)` — braille spinner cycling at ~10 fps |
+| `theme.rs` | `colors` module (full palette: BG_VOID→BG_ELEVATED depth layers, ORANGE/ORANGE_DIM/ORANGE_GLOW, GREEN/GREEN_DIM/GREEN_GLOW, RED/RED_GLOW, YELLOW, BLUE, TEXT_*); `spacing` module (PANEL_PAD, CARD_PAD, ITEM_GAP, BORDER_R variants); `fonts` module (SIZE_XS=10 through SIZE_HERO=26); `KitsuneTheme` backward-compat facade with all legacy aliases |
+| `chrome/top_bar.rs` | Three-row chrome: tab strip (Row 1, titlebar drag + WC buttons), nav bar (Row 2, address bar + privacy pill + downloads + find), bookmarks bar (Row 3, collapsible). Custom window-control buttons drawn with line/rect primitives. |
+| `chrome/tab_bar.rs` | Tab strip widget |
+| `panels/agent_panel.rs` | Agent workspace. Orange panel border (1.5 px AMBER when running). Pulsing status dot via `pulse_anim` at 1.5 Hz. Focus-aware input card (`colors::BG_INPUT` + AMBER border). Swarm config bar in orange-tinted frame. Swarm preset cards as styled `egui::Frame`s with SWARM badge + left accent. Log entries rendered as `egui::Frame` + 2 px colored left-border strip: Think=yellow, Cmd=blue, Ok=green, Warn=amber, Block=red. `spinner_char` shown while running. |
+| `panels/agent_card.rs` | `AgentCard { icon, name, description, status, swarm_badge }`. `lerp_anim` hover brightness. 2 px AMBER left accent when selected/running. SWARM badge with `BORDER_AMBER` stroke. `render(&self, ui, selected) -> bool`. |
+| `panels/session_panel.rs` | Right-side session panel. `section()` — collapsible wrapper storing open-state in `ctx.data` temp; arrow toggle + clickable header. `cap_toggle()` — animated toggle switch with `lerp_anim` knob position and lerp-animated track color. `vault_item()` — color-coded (token=AMBER, locked=GREEN). |
 | `panels/profile_panel.rs` | Profile indexer UI |
-| `panels/task_graph_panel.rs` | `TaskNode`, orchestrator task graph visualization |
+| `panels/task_graph_panel.rs` | `TaskNode`, orchestrator task graph visualization (stub — nodes exist, live wiring pending) |
 | `dialogs/settings_dialog.rs` | LLM / Profile / Agents settings tabs; cloud preset picker (Claude, OpenAI, Gemini, Groq, OpenRouter, Custom) |
-| `dialogs/hil_dialog.rs` | HIL approval dialog with countdown timer |
+| `dialogs/hil_dialog.rs` | HIL approval dialog. Scale-in animation via `lerp_anim` (0.85 → 1.0, speed 12). RED 1.5 px frame stroke + 3 px RED top accent bar. RED-tinted header fill. GREEN "Approve & Execute" button (black text). Outline-only RED "Deny" button. Countdown bar depletes right→left as `fraction` shrinks. Scale reset to 0.85 in ctx data on close. |
 | `dialogs/downloads_dialog.rs` | Downloads list dialog |
-| `theme.rs` | `KitsuneTheme` color constants |
+
+## UI Theme System
+
+All UI code uses the `theme` module. **Never hardcode colors or sizes.**
+
+### `colors` module — canonical palette (all `pub const Color32`)
+| Token | Value | Use |
+|---|---|---|
+| `BG_VOID` | `#08080A` | Window/screen background |
+| `BG_BASE` | `#0C0C0F` | Base layer |
+| `BG_PANEL` | `#101014` | Side panels |
+| `BG_CARD` | `#161620` | Cards, dialog backgrounds |
+| `BG_ELEVATED` | `#1C1C24` | Elevated surfaces, hover states |
+| `BG_INPUT` | `#121218` | Focused text inputs |
+| `BORDER_DIM` | `#20202A` | Default borders |
+| `BORDER_NORMAL` | `#30303E` | Normal widget borders |
+| `BORDER_BRIGHT` | `#464658` | Active/hover borders |
+| `ORANGE` | `#F97316` | Brand accent (buttons, active states) |
+| `ORANGE_DIM` | `#C25811` | Hovered widget border |
+| `ORANGE_GLOW` | premul α≈12% | Selection fill |
+| `GREEN` | `#4ADE80` | Success, safe, TLS OK |
+| `GREEN_DIM` | `#22C55E` | — |
+| `GREEN_GLOW` | premul α≈10% | Success card fill |
+| `RED` | `#F87171` | Error, HIL border, deny button |
+| `RED_GLOW` | premul α≈10% | Error card fill |
+| `YELLOW` | `#FBBF24` | Think/reasoning log entries |
+| `BLUE` | `#60A5FA` | Cmd/command log entries |
+| `TEXT_PRIMARY` | `#F0F0F5` | Main text |
+| `TEXT_SECONDARY` | `#A0A0AF` | Secondary labels |
+| `TEXT_MUTED` | `#5A5A69` | Disabled/dimmed text |
+
+### `KitsuneTheme` facade — backward-compat aliases
+Maps legacy names (`BG`, `BG1`…`BG4`, `AMBER`, `AMBER2`, `TEXT0`…`TEXT3`, `BORDER`, `BORDER2`, `BORDER_AMBER`, `AMBER_DIM`, `GREEN_DIM`, etc.) to the canonical `colors` constants. All new code should prefer `colors::*` directly; `KitsuneTheme::*` is for compatibility with pre-redesign call sites.
+
+### `spacing` and `fonts` modules
+```rust
+spacing::PANEL_PAD = 12.0    CARD_PAD = 10.0    ITEM_GAP = 6.0
+spacing::BORDER_R = 6.0      BORDER_R_SM = 4.0  BORDER_R_LG = 8.0
+
+fonts::SIZE_XS = 10.0   SIZE_SM = 11.5  SIZE_BASE = 12.5
+fonts::SIZE_MD = 14.0   SIZE_LG = 16.0  SIZE_XL = 20.0  SIZE_HERO = 26.0
+```
+
+## Animation System (`animation.rs`)
+
+Three primitives, all state stored in `egui::Context::data` temp storage keyed by `egui::Id`:
+
+```rust
+// Smooth lerp — returns current value toward `target`, speed in units/s
+pub fn lerp_anim(ctx: &egui::Context, id: egui::Id, target: f32, speed: f32) -> f32
+
+// Sine-wave pulse [0.0, 1.0] at `hz` cycles/second
+pub fn pulse_anim(ctx: &egui::Context, id: egui::Id, hz: f32) -> f32
+
+// Braille spinner (⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏) cycling at ~10 fps
+pub fn spinner_char(ctx: &egui::Context) -> &'static str
+```
+
+Usage pattern — hover brightness on a card:
+```rust
+let t   = lerp_anim(ctx, id.with("hov"), if hovered { 1.0 } else { 0.0 }, 8.0);
+let col = Color32::from_gray((28.0 + 8.0 * t) as u8);
+```
+
+`lerp_anim` always calls `ctx.request_repaint()` while animating. The caller does not need to request repaint separately.
+
+## Left-Border Log Entry Pattern
+
+Log entries in `agent_panel.rs` use a two-step paint pattern:
+
+```rust
+let frame_resp = egui::Frame::none()
+    .fill(tinted_bg)
+    .inner_margin(...)
+    .show(ui, |ui| { /* entry content */ });
+
+// Paint 2px left accent strip after the frame has been laid out
+let strip = egui::Rect::from_min_size(
+    frame_resp.response.rect.left_top(),
+    egui::vec2(2.0, frame_resp.response.rect.height()),
+);
+ui.painter().rect_filled(strip, 0.0, accent_color);
+```
+
+This avoids needing a nested frame for the stripe and works at any height.
 
 ## Security Boundaries
 
@@ -211,17 +303,18 @@ All cloud presets go through `LlmBackend::Cloud` which POSTs to `{url}/chat/comp
 
 ## External Dependencies (non-obvious only)
 
-- `wry` 0.38 → WebView2 host. Crate named `kitsune-cef` for legacy reasons. Windows-tuned (Win32 `SetFocus` FFI, `WebViewBuilder::new_as_child`). `CefEvent` now includes `DownloadStarted`/`DownloadCompleted`. Window.open() redirected back to same tab via initialization script `NEW_WINDOW_REDIRECT_JS`.
+- `wry` 0.38 → WebView2 host. Crate named `kitsune-cef` for legacy reasons. Windows-tuned (Win32 `SetFocus` FFI, `WebViewBuilder::new_as_child`). `CefEvent` now includes `DownloadStarted`/`DownloadCompleted`. Window.open() redirected back to same tab via initialization script `NEW_WINDOW_REDIRECT_JS`. Method to stop loading is `stop_load()` (not `stop()`).
 - `age` 0.10 → vault encryption. Passphrase mode with Argon2id-derived key as passphrase.
 - `argon2` → password-based KDF. Memory-hard parameters baked in.
 - `keyring` 3 → OS keychain. Stores: KDF salt (`kitsune-vault/kdf-salt`), secret salt (`kitsune-vault/secret-salt`), cloud auth token (`kitsune-engine/cloud-token`).
 - `interprocess` 2 → cross-platform local sockets / named pipes for IPC transport.
 - `postcard` 1 → compact serialization for IPC wire format.
 - `candle-core` / `candle-transformers` / `candle-nn` / `hf-hub` / `tokenizers` → feature-gated (`kitsune-ai/local-model`) for on-device inference. Pro tier only — not yet wired.
-- `eframe` 0.30 / `egui` 0.30 → native shell (`glow` backend).
+- `eframe` 0.30 / `egui` 0.30 → native shell (`glow` backend). egui 0.30 API notes: scroll bar settings are at `style.spacing.scroll.{bar_width, handle_min_length}` (NOT on `style.visuals`). `from_rgba_premultiplied` is `const fn`; `from_rgba_unmultiplied` is NOT — only use premultiplied for `pub const` definitions.
 - `rusqlite` (bundled) → vault store.
 - `rustls` 0.23 / `reqwest` with `rustls-tls` only → no native TLS; ensures TLS 1.3+ enforcement.
 - `cookie_store` 0.21 → backs `PartitionedCookieJar` keyed by `(top_level_origin, request_origin)`.
+- `image` 0.25 → used in `main.rs` to decode the embedded PNG icon (`load_from_memory` → `into_rgba8()`).
 - `axum` 0.7 + `tokio-stream` + `async-stream` → only used by `kitsune-cloud-mock`.
 - `windows-sys` → Job Objects sandbox primitives.
 - `zeroize` (with `derive`) → mandatory for every type holding a secret.
@@ -253,6 +346,9 @@ cargo test -p kitsune-hil
 # Full test suite
 cargo test --workspace
 
+# Regenerate app icon (requires Python + Pillow)
+python gen_icon.py
+
 # Local-model AI (Pro tier path; pulls candle stack)
 cargo build -p kitsune-ai --features local-model
 ```
@@ -266,7 +362,9 @@ The `kitsune-vault` tests construct an in-memory vault; they will prompt or fail
 ## Current State & Known Gaps
 
 Working:
-- `egui` shell: tab bar, top bar, agent panel, session panel, HIL dialog, settings dialog (3 tabs: LLM / Profile / Agents), downloads dialog.
+- **Full dark cyberpunk UI redesign complete.** New theme system (`colors`, `spacing`, `fonts` modules), animation primitives (`lerp_anim`, `pulse_anim`, `spinner_char`), redesigned agent panel (pulsing dot, focus-aware input, color-coded log frames with 2 px left borders), session panel (collapsible sections, animated toggle switches), HIL dialog (scale-in animation, RED accent, GREEN/RED buttons, depleting countdown bar), agent cards (lerp hover, SWARM badge, left accent strip).
+- **Custom app icon.** Geometric kitsune fox face (256×256 RGBA PNG) baked into binary via `include_bytes!`. Multi-size ICO at repo root for Windows taskbar/exe resource.
+- `egui` shell: tab bar, top bar (3-row chrome with bookmarks bar), agent panel, session panel, HIL dialog, settings dialog (3 tabs: LLM / Profile / Agents), downloads dialog.
 - Agent panel: multiline command input (Enter submits, Shift+Enter newline), file attach with binary detection, agent cards (PriceTracker / FormFillAgent / ResearchAgent) with selection toggle and specialist context injection.
 - WebView2 embedding via `wry`, navigation, JS eval with callback, focus handoff, download events.
 - Vault crypto path (Argon2id → age), audit table, site isolation map, per-origin pseudonymization. Token store with 30 s TTL and single-use `consume_token`.
@@ -318,9 +416,11 @@ Stubbed / partial:
 8. `crates/kitsune-agent/src/action.rs` — `AgentAction` enum (includes Download).
 9. `crates/kitsune-agent/src/spec.rs` — `AgentSpec`, `AgentConstraints`, `VaultAccessLevel`.
 10. `crates/kitsune-ui/src/app.rs` — top-level `KitsuneBrowser` state, `LogLevel`, `AgentSseAction`, `CloudPreset`.
-11. `crates/kitsune-ui/src/panels/agent_panel.rs` — agent panel rendering, `start_agent_run`, `render_log_entry`, specialist card logic.
-12. `crates/kitsune-cef/src/lib.rs` — `CefBrowser` (the wry/WebView2 wrapper), `CefEvent`, download events.
-13. `crates/kitsune-sandbox/src/lib.rs` — `SandboxProfile` per role and the platform-specific application paths.
+11. `crates/kitsune-ui/src/theme.rs` — `colors`, `spacing`, `fonts` modules + `KitsuneTheme` facade. Read before touching any UI color or sizing.
+12. `crates/kitsune-ui/src/animation.rs` — `lerp_anim`, `pulse_anim`, `spinner_char`. Read before adding any animated widget.
+13. `crates/kitsune-ui/src/panels/agent_panel.rs` — agent panel rendering, `start_agent_run`, `render_log_entry`, specialist card logic.
+14. `crates/kitsune-cef/src/lib.rs` — `CefBrowser` (the wry/WebView2 wrapper), `CefEvent`, download events.
+15. `crates/kitsune-sandbox/src/lib.rs` — `SandboxProfile` per role and the platform-specific application paths.
 
 ## Naming Conventions & Code Style
 

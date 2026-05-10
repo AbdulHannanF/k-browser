@@ -1,4 +1,5 @@
-use crate::theme::KitsuneTheme;
+use crate::animation::lerp_anim;
+use crate::theme::{colors, KitsuneTheme};
 use eframe::egui;
 
 #[derive(Clone, PartialEq)]
@@ -14,51 +15,51 @@ pub struct AgentCard {
     pub name: &'static str,
     pub description: &'static str,
     pub status: AgentStatus,
+    pub swarm_badge: bool,
 }
 
 impl AgentCard {
-    /// Returns true if the card was clicked. `selected` highlights the card as active.
     pub fn render(&self, ui: &mut egui::Ui, selected: bool) -> bool {
-        let (badge_col, badge_txt) = match self.status {
-            AgentStatus::Idle => (KitsuneTheme::TEXT2, "idle"),
-            AgentStatus::Running => (KitsuneTheme::AMBER, "running"),
-            AgentStatus::Done => (KitsuneTheme::GREEN_SAFE, "done"),
-            AgentStatus::Error => (KitsuneTheme::RED_BLOCKED, "error"),
-        };
         let is_running = self.status == AgentStatus::Running;
-        let fill = if selected {
-            KitsuneTheme::AMBER_DIM
-        } else if is_running {
+        let card_id = egui::Id::new(self.name).with("card");
+
+        // Lerp hover brightness (0.0 = idle, 1.0 = hovered)
+        let hov_raw = ui.ctx().data(|d| d.get_temp::<bool>(card_id).unwrap_or(false));
+        let hov_t = lerp_anim(ui.ctx(), card_id.with("hov_t"), if hov_raw { 1.0 } else { 0.0 }, 10.0);
+
+        let (badge_col, badge_txt) = match self.status {
+            AgentStatus::Idle    => (KitsuneTheme::TEXT2,  "idle"),
+            AgentStatus::Running => (KitsuneTheme::AMBER,  "running"),
+            AgentStatus::Done    => (KitsuneTheme::GREEN,  "done"),
+            AgentStatus::Error   => (KitsuneTheme::RED,    "error"),
+        };
+
+        // Base fill lerps between BG_CARD and BG_ELEVATED on hover
+        let fill = if selected || is_running {
             KitsuneTheme::AMBER_DIM
         } else {
-            KitsuneTheme::BG_CARD
+            // Linearly interpolate between BG_CARD and BG_ELEVATED
+            let base = colors::BG_CARD;
+            let high = colors::BG_ELEVATED;
+            egui::Color32::from_rgb(
+                (base.r() as f32 + (high.r() as f32 - base.r() as f32) * hov_t) as u8,
+                (base.g() as f32 + (high.g() as f32 - base.g() as f32) * hov_t) as u8,
+                (base.b() as f32 + (high.b() as f32 - base.b() as f32) * hov_t) as u8,
+            )
         };
+
         let stroke_col = if selected || is_running {
             KitsuneTheme::BORDER_AMBER
+        } else if hov_raw {
+            KitsuneTheme::BORDER2
         } else {
             KitsuneTheme::BORDER
         };
 
-        // Read last frame's hover state so the fill/stroke are correct this frame
-        // (egui standard pattern: 1-frame delay is imperceptible at 60 fps).
-        let card_id = egui::Id::new(self.name).with("card");
-        let prev_hovered = ui.ctx().data(|d| d.get_temp::<bool>(card_id).unwrap_or(false));
-
-        let actual_fill = if prev_hovered && !is_running {
-            KitsuneTheme::BG3
-        } else {
-            fill
-        };
-        let actual_stroke = if prev_hovered {
-            egui::Stroke::new(1.0, KitsuneTheme::AMBER)
-        } else {
-            egui::Stroke::new(1.0, stroke_col)
-        };
-
         let resp = egui::Frame::none()
-            .fill(actual_fill)
+            .fill(fill)
             .rounding(egui::Rounding::same(7.0))
-            .stroke(actual_stroke)
+            .stroke(egui::Stroke::new(1.0, stroke_col))
             .inner_margin(egui::Margin::symmetric(10.0, 8.0))
             .show(ui, |ui| {
                 ui.set_min_width(ui.available_width());
@@ -67,7 +68,6 @@ impl AgentCard {
                     ui.label(egui::RichText::new(self.icon).size(15.0).color(KitsuneTheme::TEXT1));
                     ui.add_space(6.0);
 
-                    // Name + description (takes remaining space)
                     ui.vertical(|ui| {
                         ui.horizontal(|ui| {
                             ui.label(
@@ -76,14 +76,15 @@ impl AgentCard {
                                     .size(12.0)
                                     .color(KitsuneTheme::TEXT_PRIMARY),
                             );
-                            ui.add_space(6.0);
-                            // Status badge inline with name
+                            ui.add_space(4.0);
+
+                            // Status badge
+                            let badge_r = badge_col.r();
+                            let badge_g = badge_col.g();
+                            let badge_b = badge_col.b();
                             egui::Frame::none()
-                                .fill(egui::Color32::from_rgba_unmultiplied(
-                                    badge_col.r(),
-                                    badge_col.g(),
-                                    badge_col.b(),
-                                    30,
+                                .fill(egui::Color32::from_rgba_premultiplied(
+                                    badge_r / 8, badge_g / 8, badge_b / 8, 30,
                                 ))
                                 .rounding(egui::Rounding::same(20.0))
                                 .inner_margin(egui::Margin::symmetric(6.0, 1.0))
@@ -95,6 +96,25 @@ impl AgentCard {
                                             .family(egui::FontFamily::Monospace),
                                     );
                                 });
+
+                            // SWARM badge
+                            if self.swarm_badge {
+                                ui.add_space(3.0);
+                                egui::Frame::none()
+                                    .fill(egui::Color32::from_rgba_premultiplied(29, 14, 3, 40))
+                                    .rounding(egui::Rounding::same(20.0))
+                                    .stroke(egui::Stroke::new(1.0, KitsuneTheme::BORDER_AMBER))
+                                    .inner_margin(egui::Margin::symmetric(6.0, 1.0))
+                                    .show(ui, |ui| {
+                                        ui.label(
+                                            egui::RichText::new("SWARM")
+                                                .size(8.5)
+                                                .color(KitsuneTheme::AMBER)
+                                                .strong()
+                                                .family(egui::FontFamily::Monospace),
+                                        );
+                                    });
+                            }
                         });
                         ui.label(
                             egui::RichText::new(self.description)
@@ -106,7 +126,15 @@ impl AgentCard {
             })
             .response;
 
-        // Compute full-card interaction and store hover state for next frame.
+        // Left accent strip when selected or running
+        if selected || is_running {
+            let strip = egui::Rect::from_min_size(
+                resp.rect.left_top(),
+                egui::vec2(2.0, resp.rect.height()),
+            );
+            ui.painter().rect_filled(strip, egui::Rounding::ZERO, KitsuneTheme::AMBER);
+        }
+
         let card_resp = ui.interact(resp.rect, card_id, egui::Sense::click());
         ui.ctx().data_mut(|d| d.insert_temp(card_id, card_resp.hovered()));
         card_resp.clicked()

@@ -6,6 +6,7 @@
 //   - Center: WebView2 surface rendering real web pages
 //   - Overlay: HIL confirmation dialog when an agent needs approval
 
+pub mod animation;
 pub mod app;
 pub mod chrome;
 pub mod dialogs;

@@ -28,6 +28,13 @@ use kitsune_vault::VaultBackend;
 
 const DEFAULT_HOME: &str = "https://www.google.com";
 
+/// A saved bookmark entry.
+#[derive(Debug, Clone)]
+pub struct BookmarkItem {
+    pub title: String,
+    pub url: String,
+}
+
 // ─── Public state types ──────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -245,6 +252,14 @@ pub struct KitsuneBrowser {
     pub profile_summary: Option<ProfileSummary>,
     pub orchestrator: Option<Arc<AgentOrchestrator>>,
     pub ai_client: Option<Arc<AgentAiClient>>,
+
+    // ── Browser chrome extras ────────────────────────────────────────────────
+    pub show_bookmarks_bar: bool,
+    pub bookmarks: Vec<BookmarkItem>,
+    pub show_find_bar: bool,
+    pub find_query: String,
+    pub show_shortcuts: bool,
+    pub hover_url: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -513,6 +528,16 @@ impl KitsuneBrowser {
             profile_summary,
             orchestrator,
             ai_client,
+            show_bookmarks_bar: true,
+            bookmarks: vec![
+                BookmarkItem { title: "Google".into(),    url: "https://www.google.com".into() },
+                BookmarkItem { title: "GitHub".into(),    url: "https://github.com".into() },
+                BookmarkItem { title: "KitsuneEngine".into(), url: "https://kengine.tech".into() },
+            ],
+            show_find_bar: false,
+            find_query: String::new(),
+            show_shortcuts: false,
+            hover_url: String::new(),
         }
     }
 
@@ -929,6 +954,29 @@ impl eframe::App for KitsuneBrowser {
         self.process_file_perm_requests();
         self.process_hil_checkpoints(ctx);
 
+        // ── Keyboard shortcuts ───────────────────────────────────────────────
+        ctx.input(|i| {
+            if i.modifiers.ctrl && i.modifiers.shift && i.key_pressed(egui::Key::B) {
+                // handled via flag below
+            }
+        });
+        if ctx.input(|i| i.modifiers.ctrl && i.modifiers.shift && i.key_pressed(egui::Key::B)) {
+            self.show_bookmarks_bar = !self.show_bookmarks_bar;
+        }
+        if ctx.input(|i| i.modifiers.ctrl && !i.modifiers.shift && i.key_pressed(egui::Key::F)) {
+            self.show_find_bar = !self.show_find_bar;
+            if self.show_find_bar {
+                self.find_query.clear();
+            }
+        }
+        if ctx.input(|i| i.modifiers.ctrl && i.key_pressed(egui::Key::Slash)) {
+            self.show_shortcuts = !self.show_shortcuts;
+        }
+        if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+            self.show_find_bar  = false;
+            self.show_shortcuts = false;
+        }
+
         // Fix HIL started_at if it hasn't been set yet
         if let Some(ref mut hil) = self.hil_action {
             if hil.started_at == 0.0 {
@@ -1089,6 +1137,129 @@ impl eframe::App for KitsuneBrowser {
 
         // ── Overlay: Settings dialog ─────────────────────────────────────
         settings_dialog(ctx, self);
+
+        // ── Status bar (bottom) ──────────────────────────────────────────
+        egui::TopBottomPanel::bottom("status_bar")
+            .exact_height(18.0)
+            .frame(
+                egui::Frame::none()
+                    .fill(KitsuneTheme::BG)
+                    .stroke(egui::Stroke::new(1.0, KitsuneTheme::BORDER)),
+            )
+            .show(ctx, |ui| {
+                ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                    ui.add_space(8.0);
+                    if !self.hover_url.is_empty() {
+                        ui.label(
+                            egui::RichText::new(&self.hover_url)
+                                .size(10.0)
+                                .color(KitsuneTheme::TEXT3)
+                                .family(egui::FontFamily::Monospace),
+                        );
+                    }
+                });
+            });
+
+        // ── Find bar (floating overlay) ──────────────────────────────────
+        if self.show_find_bar {
+            egui::Window::new("find_bar_window")
+                .title_bar(false)
+                .resizable(false)
+                .collapsible(false)
+                .anchor(egui::Align2::RIGHT_BOTTOM, [-8.0, -28.0])
+                .fixed_size([320.0, 36.0])
+                .frame(
+                    egui::Frame::none()
+                        .fill(KitsuneTheme::BG2)
+                        .stroke(egui::Stroke::new(1.0, KitsuneTheme::BORDER2))
+                        .rounding(egui::Rounding::same(6.0))
+                        .inner_margin(egui::Margin::symmetric(8.0, 6.0)),
+                )
+                .show(ctx, |ui| {
+                    ui.horizontal_centered(|ui| {
+                        let te = egui::TextEdit::singleline(&mut self.find_query)
+                            .desired_width(200.0)
+                            .frame(false)
+                            .hint_text("Find in page…")
+                            .font(egui::FontId::monospace(11.0))
+                            .text_color(KitsuneTheme::TEXT_PRIMARY);
+                        ui.add(te);
+                        ui.add_space(4.0);
+                        ui.label(
+                            egui::RichText::new("0 results")
+                                .size(10.0)
+                                .color(KitsuneTheme::TEXT3)
+                                .family(egui::FontFamily::Monospace),
+                        );
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if ui.small_button(
+                                egui::RichText::new("✕").color(KitsuneTheme::TEXT2)
+                            ).clicked() {
+                                self.show_find_bar = false;
+                            }
+                            ui.add_space(4.0);
+                            ui.small_button(egui::RichText::new("▼").color(KitsuneTheme::TEXT2));
+                            ui.small_button(egui::RichText::new("▲").color(KitsuneTheme::TEXT2));
+                        });
+                    });
+                });
+        }
+
+        // ── Keyboard shortcuts overlay ───────────────────────────────────
+        if self.show_shortcuts {
+            let mut open = self.show_shortcuts;
+            egui::Window::new("⌨ Keyboard Shortcuts")
+                .open(&mut open)
+                .collapsible(false)
+                .resizable(false)
+                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                .default_width(380.0)
+                .frame(
+                    egui::Frame::none()
+                        .fill(KitsuneTheme::BG2)
+                        .stroke(egui::Stroke::new(1.0, KitsuneTheme::BORDER2))
+                        .rounding(egui::Rounding::same(8.0))
+                        .inner_margin(egui::Margin::same(16.0)),
+                )
+                .show(ctx, |ui| {
+                    let shortcuts: &[(&str, &str)] = &[
+                        ("Ctrl+F",         "Find in page"),
+                        ("Ctrl+Shift+B",   "Toggle bookmarks bar"),
+                        ("Ctrl+/",         "Keyboard shortcuts"),
+                        ("Ctrl+T",         "New tab"),
+                        ("Ctrl+W",         "Close tab"),
+                        ("Enter",          "Run agent"),
+                        ("Shift+Enter",    "Newline in prompt"),
+                        ("Escape",         "Close overlay / stop"),
+                    ];
+                    egui::Grid::new("shortcuts_grid")
+                        .num_columns(2)
+                        .spacing([24.0, 5.0])
+                        .show(ui, |ui| {
+                            for (keys, desc) in shortcuts {
+                                egui::Frame::none()
+                                    .fill(KitsuneTheme::BG3)
+                                    .rounding(egui::Rounding::same(3.0))
+                                    .inner_margin(egui::Margin::symmetric(6.0, 2.0))
+                                    .show(ui, |ui| {
+                                        ui.label(
+                                            egui::RichText::new(*keys)
+                                                .size(10.5)
+                                                .color(KitsuneTheme::AMBER)
+                                                .family(egui::FontFamily::Monospace),
+                                        );
+                                    });
+                                ui.label(
+                                    egui::RichText::new(*desc)
+                                        .size(11.5)
+                                        .color(KitsuneTheme::TEXT1),
+                                );
+                                ui.end_row();
+                            }
+                        });
+                });
+            self.show_shortcuts = open;
+        }
 
         // ── Center: WebView area ─────────────────────────────────────────
         // egui reports rects in logical pixels; Win32/WebView2 needs physical

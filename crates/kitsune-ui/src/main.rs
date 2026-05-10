@@ -26,13 +26,22 @@ fn main() -> eframe::Result<()> {
         "Starting KitsuneEngine"
     );
 
+    // Load the embedded kitsune fox icon (256×256 RGBA PNG baked into the binary)
+    let icon = load_icon();
+
     // Configure the native window (decorations off — we draw our own titlebar)
+    let mut viewport = egui::ViewportBuilder::default()
+        .with_title("KitsuneEngine")
+        .with_inner_size([1280.0, 800.0])
+        .with_min_inner_size([800.0, 600.0])
+        .with_decorations(false);
+
+    if let Some(icon_data) = icon {
+        viewport = viewport.with_icon(std::sync::Arc::new(icon_data));
+    }
+
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default()
-            .with_title("KitsuneEngine")
-            .with_inner_size([1280.0, 800.0])
-            .with_min_inner_size([800.0, 600.0])
-            .with_decorations(false),
+        viewport,
         ..Default::default()
     };
 
@@ -42,4 +51,16 @@ fn main() -> eframe::Result<()> {
         options,
         Box::new(|cc| Ok(Box::new(KitsuneBrowser::new(cc)))),
     )
+}
+
+fn load_icon() -> Option<egui::IconData> {
+    const ICON_BYTES: &[u8] = include_bytes!("../assets/kitsune-icon.png");
+    let img = image::load_from_memory(ICON_BYTES).ok()?;
+    let img = img.into_rgba8();
+    let (w, h) = img.dimensions();
+    Some(egui::IconData {
+        rgba: img.into_raw(),
+        width: w,
+        height: h,
+    })
 }
