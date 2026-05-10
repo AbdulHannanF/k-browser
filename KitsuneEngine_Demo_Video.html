@@ -1,0 +1,1003 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>KitsuneEngine — Demo Pitch Video</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;700&family=Bebas+Neue&display=swap');
+
+  :root {
+    --black: #080808;
+    --dark: #111111;
+    --card: #181818;
+    --orange: #FF5C1A;
+    --orange-glow: rgba(255,92,26,0.25);
+    --white: #FFFFFF;
+    --muted: #888888;
+    --muted2: #BBBBBB;
+    --green: #22C55E;
+    --border: #2A2A2A;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+  }
+
+  body {
+    background: var(--black);
+    color: var(--white);
+    font-family: 'Space Grotesk', sans-serif;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* ─── Slide container ─────────────────────────── */
+  .slides {
+    width: 1280px;
+    height: 720px;
+    position: relative;
+    transform-origin: center center;
+    flex-shrink: 0;
+  }
+
+  .slide {
+    position: absolute;
+    inset: 0;
+    width: 1280px;
+    height: 720px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.6s ease;
+    overflow: hidden;
+    background: var(--black);
+  }
+
+  .slide.active {
+    opacity: 1;
+    pointer-events: all;
+  }
+
+  /* ─── Orange accent bar ───────────────────────── */
+  .acc {
+    position: absolute;
+    left: 0; top: 0;
+    width: 6px;
+    height: 100%;
+    background: var(--orange);
+  }
+
+  /* ─── Grid noise overlay ──────────────────────── */
+  .noise {
+    position: absolute;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='0.025'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 100;
+  }
+
+  /* ─── Controls ────────────────────────────────── */
+  .controls {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: rgba(17,17,17,0.95);
+    border: 1px solid var(--border);
+    border-radius: 40px;
+    padding: 8px 20px;
+    backdrop-filter: blur(12px);
+  }
+
+  .controls button {
+    background: none;
+    border: none;
+    color: var(--muted2);
+    cursor: pointer;
+    font-size: 18px;
+    transition: color 0.2s;
+    padding: 4px 8px;
+  }
+  .controls button:hover { color: var(--orange); }
+
+  .dot-track { display: flex; gap: 8px; align-items: center; }
+  .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--border);
+    cursor: pointer;
+    transition: all 0.3s;
+  }
+  .dot.active { background: var(--orange); width: 20px; border-radius: 3px; }
+
+  .progress {
+    position: fixed;
+    top: 0; left: 0;
+    height: 3px;
+    background: var(--orange);
+    transition: width 0.4s ease;
+    z-index: 200;
+    box-shadow: 0 0 12px var(--orange-glow);
+  }
+
+  .slide-label {
+    position: fixed;
+    top: 16px; right: 20px;
+    font-size: 11px;
+    color: var(--muted);
+    font-family: 'JetBrains Mono', monospace;
+    z-index: 200;
+    letter-spacing: 1px;
+  }
+
+  /* ─── Typography helpers ──────────────────────── */
+  .label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 4px;
+    color: var(--orange);
+    text-transform: uppercase;
+    margin-bottom: 16px;
+  }
+
+  .h1 {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 96px;
+    line-height: 0.92;
+    letter-spacing: 2px;
+  }
+
+  .h2 {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 64px;
+    line-height: 1;
+    letter-spacing: 2px;
+  }
+
+  .h3 {
+    font-size: 22px;
+    font-weight: 600;
+    line-height: 1.3;
+  }
+
+  .body { font-size: 15px; color: var(--muted2); line-height: 1.6; }
+  .mono { font-family: 'JetBrains Mono', monospace; }
+
+  /* ─── Cards ───────────────────────────────────── */
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 20px 24px;
+    position: relative;
+  }
+  .card::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+    background: var(--orange);
+    border-radius: 4px 0 0 4px;
+  }
+
+  /* ─── Terminal ────────────────────────────────── */
+  .terminal {
+    background: #0D0D0D;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    overflow: hidden;
+  }
+  .terminal-bar {
+    background: #1A1A1A;
+    padding: 8px 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  .dot-r { width:10px;height:10px;border-radius:50%;background:#FF5F57; }
+  .dot-y { width:10px;height:10px;border-radius:50%;background:#FFBD2E; }
+  .dot-g { width:10px;height:10px;border-radius:50%;background:#28C840; }
+  .terminal-title { font-size:11px;color:var(--muted);margin-left:8px;letter-spacing:1px; }
+  .terminal-body { padding: 16px 20px; }
+  .t-line { margin-bottom: 6px; }
+  .t-cmd { color: var(--green); }
+  .t-comment { color: var(--muted); }
+  .t-result { color: var(--muted2); }
+  .t-warn { color: var(--orange); }
+  .t-ok { color: var(--green); }
+
+  /* ─── Stat pill ───────────────────────────────── */
+  .stat-row { display: flex; gap: 16px; }
+  .stat {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 18px 24px;
+    text-align: center;
+    flex: 1;
+  }
+  .stat-val { font-family:'Bebas Neue',sans-serif;font-size:48px;color:var(--orange);line-height:1; }
+  .stat-label { font-size:12px;color:var(--muted2);margin-top:4px; }
+  .stat-sub { font-size:10px;color:var(--muted);margin-top:2px; }
+
+  /* ─── SLIDE 1: Cover ──────────────────────────── */
+  #s1 {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 0 72px;
+  }
+  #s1 .bg-grid {
+    position: absolute;
+    inset: 0;
+    background-image: linear-gradient(var(--border) 1px, transparent 1px),
+                      linear-gradient(90deg, var(--border) 1px, transparent 1px);
+    background-size: 60px 60px;
+    opacity: 0.15;
+  }
+  #s1 .right-panel {
+    position: absolute;
+    right: 48px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 380px;
+  }
+  #s1 .pills { display:flex; gap:10px; margin-top:28px; flex-wrap:wrap; }
+  #s1 .pill {
+    border: 1px solid var(--orange);
+    color: var(--orange);
+    font-size: 11px;
+    padding: 5px 14px;
+    border-radius: 20px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    background: rgba(255,92,26,0.08);
+  }
+  #s1 .tagline { font-size:22px;color:var(--muted2);margin-top:12px;font-style:italic; }
+  #s1 .footer {
+    position: absolute;
+    bottom: 28px; left: 72px;
+    font-size: 11px;
+    color: var(--muted);
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 1px;
+  }
+
+  /* ─── SLIDE 2: Problem ────────────────────────── */
+  #s2 { padding: 60px 72px; }
+  #s2 .content { display: grid; grid-template-columns: 1fr 380px; gap: 60px; margin-top: 40px; }
+  #s2 .prob-list { display:flex;flex-direction:column;gap:18px; }
+  #s2 .prob { display:flex;gap:16px;align-items:flex-start; }
+  #s2 .prob-num { font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--orange);padding-top:3px;min-width:24px; }
+  #s2 .prob-title { font-size:16px;font-weight:700;margin-bottom:4px; }
+  #s2 .prob-desc { font-size:13px;color:var(--muted2);line-height:1.5; }
+
+  /* ─── SLIDE 3: Solution ───────────────────────── */
+  #s3 { padding: 52px 72px; }
+  #s3 .grid { display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:36px; }
+  #s3 .feat { background:var(--card);border:1px solid var(--border);border-radius:4px;padding:20px;position:relative;overflow:hidden; }
+  #s3 .feat::before { content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--orange); }
+  #s3 .feat-num { font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--orange);margin-bottom:8px; }
+  #s3 .feat-title { font-size:15px;font-weight:700;margin-bottom:6px; }
+  #s3 .feat-desc { font-size:12px;color:var(--muted2);line-height:1.5; }
+
+  /* ─── SLIDE 4: Swarm ──────────────────────────── */
+  #s4 { padding: 52px 72px; }
+  #s4 .swarm-diagram {
+    margin-top: 32px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+  }
+  #s4 .orchestrator {
+    background: var(--orange);
+    color: var(--black);
+    font-family: 'Bebas Neue',sans-serif;
+    font-size: 28px;
+    padding: 12px 48px;
+    letter-spacing: 3px;
+    border-radius: 4px;
+  }
+  #s4 .conn-line {
+    display:flex;
+    justify-content:space-around;
+    width:900px;
+    position:relative;
+    height:40px;
+  }
+  #s4 .conn-line::before {
+    content:'';
+    position:absolute;
+    top:0;left:50px;right:50px;
+    height:1px;background:var(--orange);opacity:0.4;
+  }
+  #s4 .vert { width:1px;height:40px;background:var(--orange);opacity:0.4; }
+  #s4 .agents { display:flex;gap:12px;justify-content:center; }
+  #s4 .agent-card {
+    background:var(--card);
+    border:1px solid var(--border);
+    border-radius:4px;
+    padding:14px 16px;
+    width:160px;
+    text-align:center;
+  }
+  #s4 .agent-icon { font-size:22px;margin-bottom:6px; }
+  #s4 .agent-name { font-size:13px;font-weight:700;color:var(--orange);margin-bottom:4px; }
+  #s4 .agent-sub { font-size:10px;color:var(--muted);line-height:1.4; }
+  #s4 .swarm-stats { display:flex;gap:16px;margin-top:28px;width:100%; }
+  #s4 .swarm-stat { flex:1;background:var(--card);border:1px solid var(--border);border-radius:4px;padding:12px;text-align:center; }
+  #s4 .swarm-stat-val { font-family:'Bebas Neue',sans-serif;font-size:32px;color:var(--orange); }
+  #s4 .swarm-stat-label { font-size:11px;color:var(--muted2); }
+
+  /* ─── SLIDE 5: Use cases ──────────────────────── */
+  #s5 { padding: 52px 72px; }
+  #s5 .uc-grid { display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:36px; }
+  #s5 .uc-card { background:var(--card);border:1px solid var(--border);border-radius:4px;overflow:hidden; }
+  #s5 .uc-header { padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px; }
+  #s5 .uc-icon { font-size:20px; }
+  #s5 .uc-sector { font-size:13px;font-weight:700;color:var(--orange); }
+  #s5 .uc-title { font-size:15px;font-weight:700;padding:14px 20px 8px; }
+  #s5 .uc-body { padding:0 20px 16px; }
+  #s5 .uc-pt { font-size:12px;color:var(--muted2);margin-bottom:4px;display:flex;gap:6px; }
+  #s5 .uc-pt::before { content:'▸';color:var(--orange);flex-shrink:0; }
+
+  /* ─── SLIDE 6: AMD ────────────────────────────── */
+  #s6 { padding: 52px 72px; }
+  #s6 .content { display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:36px; }
+  #s6 .amd-card { background:var(--card);border:1px solid var(--border);border-radius:4px;padding:24px;position:relative;overflow:hidden; }
+  #s6 .amd-card::before { content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--orange); }
+  #s6 .amd-title { font-size:16px;font-weight:700;margin-bottom:8px;color:var(--white); }
+  #s6 .amd-desc { font-size:13px;color:var(--muted2);line-height:1.6;margin-bottom:12px; }
+  #s6 .amd-badge { display:inline-flex;align-items:center;gap:6px;border:1px solid var(--orange);color:var(--orange);font-size:10px;padding:4px 10px;border-radius:12px;font-weight:700; }
+
+
+
+  /* ─── SLIDE 8: Closing ────────────────────────── */
+  #s8 {
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+    padding: 0 72px;
+  }
+
+  /* ─── SLIDE 9: Can't run online ──────────────── */
+  #s9 { padding: 52px 72px; }
+  #s9 .bg-grid {
+    position:absolute;inset:0;
+    background-image:linear-gradient(var(--border) 1px,transparent 1px),linear-gradient(90deg,var(--border) 1px,transparent 1px);
+    background-size:60px 60px;opacity:0.08;
+  }
+  #s9 .layout { display:grid;grid-template-columns:1fr 420px;gap:40px;margin-top:36px;position:relative;z-index:2; }
+  #s9 .reason-list { display:flex;flex-direction:column;gap:14px; }
+  #s9 .reason {
+    display:flex;gap:14px;align-items:flex-start;
+    background:var(--card);border:1px solid var(--border);
+    border-radius:4px;padding:16px 20px;
+    position:relative;overflow:hidden;
+  }
+  #s9 .reason::before { content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--orange); }
+  #s9 .reason-icon { font-size:22px;flex-shrink:0;margin-top:2px; }
+  #s9 .reason-title { font-size:14px;font-weight:700;margin-bottom:4px; }
+  #s9 .reason-desc { font-size:12px;color:var(--muted2);line-height:1.55; }
+  #s9 .cloud-comparison {
+    background:var(--card);border:1px solid var(--border);
+    border-radius:4px;overflow:hidden;
+  }
+  #s9 .cc-header { padding:14px 20px;background:#1A1A1A;border-bottom:1px solid var(--border);font-size:12px;color:var(--orange);font-weight:700; }
+  #s9 .cc-row { display:flex;justify-content:space-between;align-items:center;padding:12px 20px;border-bottom:1px solid #1E1E1E; }
+  #s9 .cc-row:last-child { border-bottom:none; }
+  #s9 .cc-key { font-size:12px;color:var(--muted2); }
+  #s9 .cc-bad { font-size:12px;color:#EF4444;font-weight:700; }
+  #s9 .cc-good { font-size:12px;color:var(--green);font-weight:700; }
+  #s9 .notice-box {
+    margin-top:20px;
+    background:rgba(255,92,26,0.07);
+    border:1px solid rgba(255,92,26,0.3);
+    border-radius:4px;padding:14px 18px;
+    display:flex;gap:12px;align-items:flex-start;
+  }
+  #s9 .notice-box .icon { font-size:18px;flex-shrink:0;margin-top:1px; }
+  #s9 .notice-box p { font-size:12px;color:var(--muted2);line-height:1.6; }
+
+  /* ─── SLIDE 10: How to run ────────────────────── */
+  #s10 { padding: 52px 72px; }
+  #s10 .layout { display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:36px; }
+  #s10 .run-panel { background:var(--card);border:1px solid var(--border);border-radius:4px;overflow:hidden;display:flex;flex-direction:column; }
+  #s10 .run-header {
+    padding:14px 20px;
+    border-bottom:1px solid var(--border);
+    display:flex;align-items:center;gap:10px;
+  }
+  #s10 .run-badge {
+    font-family:'JetBrains Mono',monospace;font-size:9px;
+    letter-spacing:2px;background:var(--orange);color:var(--black);
+    padding:3px 8px;border-radius:2px;font-weight:700;
+  }
+  #s10 .run-badge.easy { background:var(--green);color:var(--black); }
+  #s10 .run-title { font-size:14px;font-weight:700; }
+  #s10 .run-body { padding:20px;flex:1;display:flex;flex-direction:column;gap:14px; }
+  #s10 .step { display:flex;gap:12px;align-items:flex-start; }
+  #s10 .step-num { font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--orange);min-width:20px;padding-top:2px; }
+  #s10 .step-text { font-size:13px;color:var(--muted2);line-height:1.5; }
+  #s10 .step-text code { font-family:'JetBrains Mono',monospace;font-size:11px;background:#0D0D0D;border:1px solid var(--border);padding:2px 6px;border-radius:3px;color:var(--green); }
+  #s10 .sep { height:1px;background:var(--border);margin:2px 0; }
+  #s10 .prereq { display:flex;gap:8px;align-items:center;font-size:11px;color:var(--muted);margin-top:auto;padding-top:8px; }
+  #s10 .prereq span { color:var(--orange); }
+  #s10 .kengine-link {
+    display:flex;align-items:center;justify-content:space-between;
+    background:rgba(255,92,26,0.08);border:1px solid rgba(255,92,26,0.35);
+    border-radius:4px;padding:14px 20px;margin-top:24px;
+    text-decoration:none;
+  }
+  #s10 .kl-left { display:flex;flex-direction:column;gap:4px; }
+  #s10 .kl-label { font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--orange);letter-spacing:2px; }
+  #s10 .kl-url { font-size:18px;font-weight:700;color:var(--white);font-family:'Bebas Neue',sans-serif;letter-spacing:2px; }
+  #s10 .kl-arrow { font-size:28px;color:var(--orange); }
+  #s8 .bg-radial {
+    position:absolute;
+    inset:0;
+    background: radial-gradient(ellipse at 60% 50%, rgba(255,92,26,0.08) 0%, transparent 65%);
+    pointer-events:none;
+  }
+  #s8 .links { display:flex;gap:16px;margin-top:40px; }
+  #s8 .link-btn {
+    border:1px solid var(--border);
+    color:var(--muted2);
+    font-size:13px;
+    padding:10px 20px;
+    border-radius:4px;
+    font-weight:600;
+    background:var(--card);
+    cursor:pointer;
+    transition:all 0.2s;
+    text-decoration:none;
+  }
+  #s8 .link-btn.primary { background:var(--orange);color:var(--black);border-color:var(--orange); }
+  #s8 .right-info {
+    position:absolute;
+    right:72px;
+    top:50%;
+    transform:translateY(-50%);
+    width:320px;
+    display:flex;
+    flex-direction:column;
+    gap:12px;
+  }
+  #s8 .info-row {
+    background:var(--card);
+    border:1px solid var(--border);
+    border-radius:4px;
+    padding:14px 18px;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+  }
+  #s8 .info-key { font-size:12px;color:var(--muted); }
+  #s8 .info-val { font-size:13px;color:var(--orange);font-weight:700; }
+
+  /* ─── Animations ──────────────────────────────── */
+  @keyframes fadeInUp {
+    from { opacity:0;transform:translateY(20px); }
+    to { opacity:1;transform:translateY(0); }
+  }
+  @keyframes slideInLeft {
+    from { opacity:0;transform:translateX(-30px); }
+    to { opacity:1;transform:translateX(0); }
+  }
+  @keyframes typeIn {
+    from { width:0; }
+    to { width:100%; }
+  }
+  @keyframes pulse-glow {
+    0%,100% { box-shadow:0 0 0 0 var(--orange-glow); }
+    50% { box-shadow:0 0 20px 8px var(--orange-glow); }
+  }
+
+  .slide.active .anim-1 { animation: fadeInUp 0.5s ease 0.1s both; }
+  .slide.active .anim-2 { animation: fadeInUp 0.5s ease 0.25s both; }
+  .slide.active .anim-3 { animation: fadeInUp 0.5s ease 0.4s both; }
+  .slide.active .anim-4 { animation: fadeInUp 0.5s ease 0.55s both; }
+  .slide.active .anim-5 { animation: fadeInUp 0.5s ease 0.7s both; }
+  .slide.active .anim-6 { animation: fadeInUp 0.5s ease 0.85s both; }
+  .slide.active .anim-7 { animation: fadeInUp 0.5s ease 1.0s both; }
+  .slide.active .anim-8 { animation: fadeInUp 0.5s ease 1.15s both; }
+  .slide.active .acc { animation: slideInLeft 0.4s ease both; }
+  .slide.active .orchestrator { animation: pulse-glow 3s infinite 1s; }
+
+  /* ─── Cursor typing effect ────────────────────── */
+  .cursor::after {
+    content:'█';
+    color:var(--green);
+    animation: blink 1s step-end infinite;
+  }
+  @keyframes blink { 50% { opacity:0; } }
+</style>
+</head>
+<body>
+
+<div class="progress" id="progress"></div>
+<div class="slide-label" id="slideLabel">01 / 09</div>
+<div class="noise"></div>
+
+<div class="slides" id="slides">
+
+  <!-- ══════ SLIDE 1: COVER ══════ -->
+  <div class="slide active" id="s1">
+    <div class="bg-grid"></div>
+    <div class="acc"></div>
+    <div style="position:relative;z-index:2;">
+      <div class="label anim-1">AMD Hackathon — LabLabAI 6</div>
+      <div class="h1 anim-2" style="color:var(--white)">KITSUNE</div>
+      <div class="h1 anim-2" style="color:var(--orange)">ENGINE</div>
+      <div class="tagline anim-3">The Browser Agents Own.</div>
+      <div class="pills anim-4">
+        <span class="pill">Built in Rust</span>
+        <span class="pill">AMD-Powered</span>
+        <span class="pill">Agent-First</span>
+        <span class="pill">HIL-Gated</span>
+        <span class="pill">Apache 2.0</span>
+      </div>
+    </div>
+    <div class="right-panel anim-3">
+      <div class="terminal">
+        <div class="terminal-bar">
+          <div class="dot-r"></div><div class="dot-y"></div><div class="dot-g"></div>
+          <span class="terminal-title">kitsune-agent — LIVE</span>
+        </div>
+        <div class="terminal-body">
+          <div class="t-line t-cmd">▸ "book cheapest flight to Berlin"</div>
+          <div class="t-line t-comment">// Opening 3 booking engines...</div>
+          <div class="t-line t-result">↳ Loaded: skyscanner, kayak, google/flights</div>
+          <div class="t-line t-result">↳ Parsed 47 results — comparing fares</div>
+          <div class="t-line t-result">↳ Cheapest: Tue Mar 12 — €194 — Kayak</div>
+          <div class="t-line" style="height:8px"></div>
+          <div class="t-line t-warn">⚑  CONFIRM before checkout?</div>
+          <div class="t-line t-comment" style="font-size:11px;padding-left:12px">Seat 14C · €194.00 · easyJet EZY1234</div>
+          <div class="t-line t-cmd">▸ yes</div>
+          <div class="t-line t-ok">✓  Booking confirmed — receipt in vault</div>
+          <div class="t-line" style="height:8px"></div>
+          <div class="t-line t-cmd">▸ "fill all 8 job apps in pipeline"</div>
+          <div class="t-line t-result">↳ Filling via vault — no plaintext exposed</div>
+          <div class="t-line t-ok">✓  8/8 submitted <span class="cursor"></span></div>
+        </div>
+      </div>
+    </div>
+    <div class="footer">kengine.tech — Claude Code runs your terminal. Kitsune runs your web.</div>
+  </div>
+
+  <!-- ══════ SLIDE 2: WHY IT CAN'T RUN ONLINE ══════ -->
+  <div class="slide" id="s9">
+    <div class="bg-grid"></div>
+    <div class="acc"></div>
+    <div class="label anim-1" style="position:relative;z-index:2">BEFORE WE BEGIN</div>
+    <div class="h2 anim-2" style="position:relative;z-index:2"><span style="color:var(--white)">WHY WE CAN'T</span> <span style="color:var(--orange)">HOST THIS ONLINE</span></div>
+    <div class="layout anim-3">
+      <div class="reason-list">
+        <div class="reason anim-3">
+          <div class="reason-icon">🦀</div>
+          <div>
+            <div class="reason-title">Native Rust Desktop Application</div>
+            <div class="reason-desc">KitsuneEngine is a compiled Rust binary — not a web app. It embeds a real OS-level WebView (WebView2 on Windows, WebKit on macOS) that renders actual web pages. Cloud servers have no display, no GPU, no OS WebView stack to render against.</div>
+          </div>
+        </div>
+        <div class="reason anim-4">
+          <div class="reason-icon">🖥️</div>
+          <div>
+            <div class="reason-title">Requires Display Server &amp; GPU Access</div>
+            <div class="reason-desc">The browser engine relies on OS-level compositing, hardware GPU acceleration, and a windowing system (Win32 / Cocoa). Render.com and similar PaaS platforms run headless Linux containers — no display, no windowing, no WebView.</div>
+          </div>
+        </div>
+        <div class="reason anim-5">
+          <div class="reason-icon">🔐</div>
+          <div>
+            <div class="reason-title">Vault &amp; Credential Security Requires Local Trust</div>
+            <div class="reason-desc">The Argon2id encrypted vault and session tokens are bound to the local machine's environment. Running in a shared cloud container would expose the trust boundary the entire security model is built on — defeating the purpose.</div>
+          </div>
+        </div>
+        <div class="reason anim-6">
+          <div class="reason-icon">⚡</div>
+          <div>
+            <div class="reason-title">AMD ROCm Inference Is Device-Local by Design</div>
+            <div class="reason-desc">The whole point of AMD integration is that sensitive agent reasoning never leaves the user's hardware. Remote hosting would eliminate the on-device privacy guarantee that differentiates Kitsune from every cloud-based competitor.</div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="cloud-comparison anim-3">
+          <div class="cc-header">Render.com vs Local Machine</div>
+          <div class="cc-row"><span class="cc-key">Display / GPU</span><span class="cc-bad">✗ Headless container</span></div>
+          <div class="cc-row"><span class="cc-key">OS WebView (WebView2)</span><span class="cc-bad">✗ Not available</span></div>
+          <div class="cc-row"><span class="cc-key">Rust binary execution</span><span class="cc-bad">✗ No packaged runner</span></div>
+          <div class="cc-row"><span class="cc-key">AMD ROCm / GPU</span><span class="cc-bad">✗ No hardware</span></div>
+          <div class="cc-row"><span class="cc-key">Local vault trust</span><span class="cc-bad">✗ Shared environment</span></div>
+          <div class="cc-row" style="background:#0F1A0F;border-top:1px solid #2A3A2A"><span class="cc-key" style="color:var(--orange);font-weight:700">Your Machine</span><span class="cc-good">✓ All requirements met</span></div>
+        </div>
+        <div class="notice-box anim-4">
+          <div class="icon">💡</div>
+          <p>This is a <strong style="color:var(--white)">feature, not a limitation</strong>. Kitsune is architected to run where your data lives — on your hardware, in your trust boundary. See the next slide to run it yourself in minutes, then enjoy the full demo.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════ SLIDE 3: HOW TO RUN IT ══════ -->
+  <div class="slide" id="s10">
+    <div class="acc"></div>
+    <div class="label anim-1">GET STARTED</div>
+    <div class="h2 anim-2"><span style="color:var(--white)">TWO WAYS TO</span> <span style="color:var(--orange)">RUN KITSUNE</span></div>
+    <div class="body anim-2" style="margin-top:4px;max-width:900px">Try it yourself before the pitch — pre-built package for instant launch, or build from source for full control.</div>
+    <div class="layout anim-3">
+
+      <!-- Option A: Pre-packaged -->
+      <div class="run-panel">
+        <div class="run-header">
+          <span class="run-badge easy">EASIEST</span>
+          <span class="run-title">Download Pre-Packaged Build</span>
+        </div>
+        <div class="run-body">
+          <div class="step">
+            <div class="step-num">01</div>
+            <div class="step-text">Visit <strong style="color:var(--orange)">kengine.tech</strong> — find the download section for the pre-packaged KitsuneEngine release.</div>
+          </div>
+          <div class="sep"></div>
+          <div class="step">
+            <div class="step-num">02</div>
+            <div class="step-text">Download the installer / archive for your platform (Windows .exe installer or .zip).</div>
+          </div>
+          <div class="sep"></div>
+          <div class="step">
+            <div class="step-num">03</div>
+            <div class="step-text">Run the installer — no Rust toolchain, no build step, no dependencies required.</div>
+          </div>
+          <div class="sep"></div>
+          <div class="step">
+            <div class="step-num">04</div>
+            <div class="step-text">Launch <code>kitsune-engine.exe</code> — browser opens instantly. Agent mode is ready.</div>
+          </div>
+          <div class="prereq"><span>⚠</span> Requires Windows 10+ (WebView2 runtime — usually pre-installed via Edge)</div>
+        </div>
+      </div>
+
+      <!-- Option B: Build from source -->
+      <div class="run-panel">
+        <div class="run-header">
+          <span class="run-badge">FROM SOURCE</span>
+          <span class="run-title">Clone Repo &amp; Build with Rust</span>
+        </div>
+        <div class="run-body">
+          <div class="step">
+            <div class="step-num">01</div>
+            <div class="step-text">Install Rust toolchain: <code>https://rustup.rs</code> — one installer, takes ~2 min.</div>
+          </div>
+          <div class="sep"></div>
+          <div class="step">
+            <div class="step-num">02</div>
+            <div class="step-text">Clone the repo:<br><code>git clone https://github.com/AbdulHannanF/k-browser</code></div>
+          </div>
+          <div class="sep"></div>
+          <div class="step">
+            <div class="step-num">03</div>
+            <div class="step-text">Navigate into the folder:<br><code>cd k-browser</code></div>
+          </div>
+          <div class="sep"></div>
+          <div class="step">
+            <div class="step-num">04</div>
+            <div class="step-text">Build &amp; run in release mode:<br><code>cargo build --release</code><br>Then: <code>./target/release/kitsune-engine</code></div>
+          </div>
+          <div class="prereq"><span>⚠</span> First build: ~3–5 min (compiles all crates). Subsequent builds are incremental &amp; fast.</div>
+        </div>
+      </div>
+
+    </div>
+    <a class="kengine-link anim-4" href="https://kengine.tech" target="_blank">
+      <div class="kl-left">
+        <div class="kl-label">DOWNLOAD &amp; DOCS AVAILABLE AT</div>
+        <div class="kl-url">KENGINE.TECH →</div>
+      </div>
+      <div class="kl-arrow">⟶</div>
+    </a>
+  </div>
+
+  <!-- ══════ SLIDE 4: PROBLEM ══════ -->
+  <div class="slide" id="s2">
+    <div class="acc"></div>
+    <div class="label anim-1" style="padding:60px 72px 0">THE PROBLEM</div>
+    <div class="h2 anim-2" style="padding:0 72px;color:var(--white)">AI AGENTS ARE <span style="color:var(--orange)">BLIND</span> TO THE WEB</div>
+    <div class="content">
+      <div class="prob-list">
+        <div class="prob anim-3">
+          <div class="prob-num">01</div>
+          <div>
+            <div class="prob-title">Screenshot Scraping</div>
+            <div class="prob-desc">Agents see static JPEGs, not live DOM. Miss dynamic elements, SPA transitions, invisible state. A blind agent guessing at a webpage.</div>
+          </div>
+        </div>
+        <div class="prob anim-4">
+          <div class="prob-num">02</div>
+          <div>
+            <div class="prob-title">CDP / DevTools Hacks</div>
+            <div class="prob-desc">Fragile, detectable, browser-version-locked. Breaks with every Chrome update. Not production-grade; barely proof-of-concept.</div>
+          </div>
+        </div>
+        <div class="prob anim-5">
+          <div class="prob-num">03</div>
+          <div>
+            <div class="prob-title">Extension API Sandbox</div>
+            <div class="prob-desc">Extensions can't touch real sessions, cookies, or auth flows. They're walled off by design — and AI agents are further boxed in inside that box.</div>
+          </div>
+        </div>
+        <div class="prob anim-6">
+          <div class="prob-num">04</div>
+          <div>
+            <div class="prob-title">Zero Safety Layer</div>
+            <div class="prob-desc">Any agent action — payments, emails, account creation — fires without oversight. One hallucination = irreversible real-world consequence.</div>
+          </div>
+        </div>
+      </div>
+      <div class="anim-3" style="padding:60px 72px 0 0">
+        <div class="card" style="padding:0;overflow:hidden;border-radius:4px;">
+          <div style="padding:14px 20px;background:#181818;border-bottom:1px solid var(--border);font-size:12px;color:var(--orange);font-weight:700;">Current State of Browser AI</div>
+          <table style="width:100%;border-collapse:collapse;font-size:13px;">
+            <tr style="background:#1A1A1A;">
+              <td style="padding:10px 16px;color:var(--muted);font-family:'JetBrains Mono',monospace;font-size:11px;">Tool</td>
+              <td style="padding:10px 16px;color:var(--muted);font-size:11px;">Access</td>
+              <td style="padding:10px 16px;color:var(--muted);font-size:11px;">Safe?</td>
+            </tr>
+            <tr><td style="padding:10px 16px;font-family:'JetBrains Mono',monospace;font-size:11px;">Selenium</td><td style="padding:10px 16px;color:var(--muted2)">Partial</td><td style="padding:10px 16px;color:#EF4444">✗</td></tr>
+            <tr style="background:#141414;"><td style="padding:10px 16px;font-family:'JetBrains Mono',monospace;font-size:11px;">browser-use</td><td style="padding:10px 16px;color:var(--muted2)">Screenshot+CDP</td><td style="padding:10px 16px;color:#EF4444">✗</td></tr>
+            <tr><td style="padding:10px 16px;font-family:'JetBrains Mono',monospace;font-size:11px;">Chrome Ext.</td><td style="padding:10px 16px;color:var(--muted2)">Sandboxed API</td><td style="padding:10px 16px;color:#EF4444">✗</td></tr>
+            <tr style="background:#141414;"><td style="padding:10px 16px;font-family:'JetBrains Mono',monospace;font-size:11px;">Playwright</td><td style="padding:10px 16px;color:var(--muted2)">CDP layer</td><td style="padding:10px 16px;color:#EF4444">✗</td></tr>
+            <tr style="background:#0F1A0F;border-top:1px solid #2A3A2A;">
+              <td style="padding:10px 16px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--orange);font-weight:700;">KitsuneEngine</td>
+              <td style="padding:10px 16px;color:var(--green);font-weight:700;">Full DOM ✓</td>
+              <td style="padding:10px 16px;color:var(--green);font-weight:700;">✓</td>
+            </tr>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════ SLIDE 3: SOLUTION ══════ -->
+  <div class="slide" id="s3">
+    <div class="acc"></div>
+    <div class="label anim-1" style="padding:52px 72px 0">THE SOLUTION</div>
+    <div class="h2 anim-2" style="padding:0 72px"><span style="color:var(--orange)">KITSUNE</span> — <span style="color:var(--white)">COMPLETE AGENT SOVEREIGNTY</span></div>
+    <div class="body anim-2" style="padding:8px 72px 0;max-width:800px">Claude Code changed how developers work — because agents got real terminal access. Kitsune does this for the browser. Built in Rust. Secured by the compiler. Privacy is the architecture that makes full control safe to hand over.</div>
+    <div class="grid" style="padding:0 72px;">
+      <div class="feat anim-3"><div class="feat-num">01</div><div class="feat-title">Full DOM Read & Write</div><div class="feat-desc">Live DOM access — not screenshots. Understands page structure, SPA transitions, dynamic elements — then modifies or triggers any of it.</div></div>
+      <div class="feat anim-4"><div class="feat-num">02</div><div class="feat-title">Vault-Encrypted Sessions</div><div class="feat-desc">Argon2id + Age encryption. Credentials stored as opaque tokens — agents receive handles, never plaintext. Zero exposure by construction.</div></div>
+      <div class="feat anim-5"><div class="feat-num">03</div><div class="feat-title">Human-in-the-Loop Gates</div><div class="feat-desc">Payments, accounts, emails — blocked until explicit human approval. Non-cloneable, single-use, 30s TTL. Type-system enforced — bypass impossible.</div></div>
+      <div class="feat anim-6"><div class="feat-num">04</div><div class="feat-title">Multi-Tab Orchestration</div><div class="feat-desc">Agents open, manage, and coordinate across tabs simultaneously — like a developer with 12 windows, never confused. Parallel execution natively.</div></div>
+      <div class="feat anim-7"><div class="feat-num">05</div><div class="feat-title">No-Code Agent Builder</div><div class="feat-desc">Describe intent in plain English. Converted to repeatable, shareable, auditable agent specs — no selectors, no scripting, no boilerplate.</div></div>
+      <div class="feat anim-8"><div class="feat-num">06</div><div class="feat-title">Process-Level Sandboxing</div><div class="feat-desc">Each tab is an isolated OS process. Rust ownership makes cross-tab memory access a compile-time error — not a runtime check. Memory safe by design.</div></div>
+    </div>
+  </div>
+
+  <!-- ══════ SLIDE 4: AGENT SWARM ══════ -->
+  <div class="slide" id="s4">
+    <div class="acc"></div>
+    <div class="label anim-1" style="padding:52px 72px 0">AGENT SWARM</div>
+    <div class="h2 anim-2" style="padding:0 72px"><span style="color:var(--white)">MANY AGENTS.</span> <span style="color:var(--orange)">ONE MISSION.</span></div>
+    <div class="body anim-2" style="padding:8px 72px 0;max-width:880px">Kitsune Swarm mode deploys specialist agents in parallel — each owns a browser context, coordinates through an orchestrator, and reports back. Like Kimi's multi-agent research, but with complete DOM control and a hardware-secured vault.</div>
+    <div style="padding:0 72px">
+      <div class="swarm-diagram anim-3">
+        <div class="orchestrator">⚡  ORCHESTRATOR</div>
+        <div class="conn-line">
+          <div class="vert"></div><div class="vert"></div><div class="vert"></div><div class="vert"></div><div class="vert"></div>
+        </div>
+        <div class="agents">
+          <div class="agent-card"><div class="agent-icon">🔍</div><div class="agent-name">Discovery</div><div class="agent-sub">Parallel web research across 10+ sources simultaneously</div></div>
+          <div class="agent-card"><div class="agent-icon">📊</div><div class="agent-name">Report</div><div class="agent-sub">Structured synthesis & drafted output from findings</div></div>
+          <div class="agent-card"><div class="agent-icon">🎯</div><div class="agent-name">Expert Panel</div><div class="agent-sub">Diverse specialist perspectives for complex analysis</div></div>
+          <div class="agent-card"><div class="agent-icon">💰</div><div class="agent-name">PriceTracker</div><div class="agent-sub">Live price comparison across all vendor sites</div></div>
+          <div class="agent-card"><div class="agent-icon">📝</div><div class="agent-name">FormFill</div><div class="agent-sub">Vault-safe bulk form submission across 100+ portals</div></div>
+        </div>
+      </div>
+      <div class="swarm-stats anim-4">
+        <div class="swarm-stat"><div class="swarm-stat-val">∞</div><div class="swarm-stat-label">Parallel browser tabs</div></div>
+        <div class="swarm-stat"><div class="swarm-stat-val">5+</div><div class="swarm-stat-label">Specialist agent types</div></div>
+        <div class="swarm-stat"><div class="swarm-stat-val">0</div><div class="swarm-stat-label">Plaintext secrets exposed</div></div>
+        <div class="swarm-stat"><div class="swarm-stat-val">100%</div><div class="swarm-stat-label">Actions audit-logged</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════ SLIDE 5: USE CASES ══════ -->
+  <div class="slide" id="s5">
+    <div class="acc"></div>
+    <div class="label anim-1" style="padding:52px 72px 0">REAL-WORLD USE CASES</div>
+    <div class="h2 anim-2" style="padding:0 72px"><span style="color:var(--white)">WHERE AGENTS</span> <span style="color:var(--orange)">CHANGE EVERYTHING</span></div>
+    <div class="uc-grid" style="padding:0 72px;">
+      <div class="uc-card anim-3">
+        <div class="uc-header"><span class="uc-icon">🏥</span><span class="uc-sector">Healthcare &amp; Clinical Research</span></div>
+        <div class="uc-title">Clinical Research & Regulatory Automation</div>
+        <div class="uc-body">
+          <div class="uc-pt">Scrape PubMed, ClinicalTrials.gov, FDA databases in parallel swarms</div>
+          <div class="uc-pt">Auto-fill regulatory submission forms via vault-stored credentials</div>
+          <div class="uc-pt">HIL gate enforced before any patient-record-touching action</div>
+          <div class="uc-pt">Audit log satisfies HIPAA requirements out of the box</div>
+        </div>
+      </div>
+      <div class="uc-card anim-4">
+        <div class="uc-header"><span class="uc-icon">🏢</span><span class="uc-sector">Enterprise Back-Office</span></div>
+        <div class="uc-title">Workflow Automation at Scale</div>
+        <div class="uc-body">
+          <div class="uc-pt">Accounts payable agents log into 50+ supplier portals daily</div>
+          <div class="uc-pt">IT agents rotate credentials via SSO portals — vault-safe, zero plaintext</div>
+          <div class="uc-pt">HR agents file compliance reports across regulatory portals automatically</div>
+          <div class="uc-pt">Procurement bots compare live vendor pricing continuously</div>
+        </div>
+      </div>
+      <div class="uc-card anim-5">
+        <div class="uc-header"><span class="uc-icon">📊</span><span class="uc-sector">Finance &amp; Data Reporting</span></div>
+        <div class="uc-title">Financial Intelligence & Excel Automation</div>
+        <div class="uc-body">
+          <div class="uc-pt">Swarm agents pull live market data, earnings filings, SEC EDGAR filings</div>
+          <div class="uc-pt">Auto-populate Excel / Google Sheets via vault — no API contract needed</div>
+          <div class="uc-pt">Price tracking agents monitor competitors 24/7 with zero setup</div>
+          <div class="uc-pt">Multi-jurisdiction tax filing via vault-secured credentials</div>
+        </div>
+      </div>
+      <div class="uc-card anim-6">
+        <div class="uc-header"><span class="uc-icon">⚖️</span><span class="uc-sector">Legal &amp; Compliance</span></div>
+        <div class="uc-title">Legal Research & Filing Automation</div>
+        <div class="uc-body">
+          <div class="uc-pt">Simultaneous case law research across PACER, Westlaw, LexisNexis</div>
+          <div class="uc-pt">Auto-draft and file court documents via e-filing portals</div>
+          <div class="uc-pt">Contract clause extraction from 100+ vendor document portals</div>
+          <div class="uc-pt">Compliance monitoring across regulatory agency sites, always-on</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════ SLIDE 6: AMD INTEGRATION ══════ -->
+  <div class="slide" id="s6">
+    <div class="acc"></div>
+    <div class="label anim-1" style="padding:52px 72px 0">AMD INTEGRATION</div>
+    <div class="h2 anim-2" style="padding:0 72px"><span style="color:var(--white)">ON-DEVICE INTELLIGENCE.</span> <span style="color:var(--orange)">HARDWARE-SECURED.</span></div>
+    <div class="content" style="padding:0 72px">
+      <div class="amd-card anim-3">
+        <div class="amd-title">🔴 Local LLM via Ollama + ROCm</div>
+        <div class="amd-desc">Kitsune's AiRouter directs sensitive task types — VaultDecision, SensitiveForm — to always-local inference. AMD GPUs run Ollama models at full throughput. Agent reasoning never leaves the device. This is structural, not configurable.</div>
+        <div class="amd-badge">⚡ Data never leaves hardware</div>
+      </div>
+      <div class="amd-card anim-4">
+        <div class="amd-title">🔴 Multi-Agent Swarm Compute</div>
+        <div class="amd-desc">Each swarm agent runs a browser context and an LLM inference call in parallel. AMD MI300X unified memory handles the working-set of 10+ simultaneous agent contexts with the throughput needed for real-time orchestration.</div>
+        <div class="amd-badge">⚡ Parallel agent throughput</div>
+      </div>
+      <div class="amd-card anim-5">
+        <div class="amd-title">🔴 Roadmap: candle + ROCm</div>
+        <div class="amd-desc">kitsune-ai LocalAiBackend is feature-gated and scaffolded for the candle Rust ML framework + AMD ROCm. This will enable in-process, zero-copy model serving — no IPC overhead, no Ollama dependency, pure Rust inference on AMD silicon.</div>
+        <div class="amd-badge">⚡ Zero-IPC local inference</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:16px;">
+        <div class="amd-card anim-6" style="flex:1">
+          <div class="amd-title">🔐 Air-Gapped Enterprise</div>
+          <div class="amd-desc">AMD ROCm enables fully offline enterprise deployments. Sensitive healthcare, legal, and financial data never leaves the premises. Compliance by hardware architecture.</div>
+          <div class="amd-badge">⚡ On-prem sovereign AI</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ══════ SLIDE 9: CLOSING ══════ -->
+  <div class="slide" id="s8">
+    <div class="bg-radial"></div>
+    <div class="acc"></div>
+    <div style="position:relative;z-index:2;padding-left:0">
+      <div class="label anim-1">kengine.tech — Apache 2.0 Open Source</div>
+      <div class="h1 anim-2" style="color:var(--white);font-size:80px">THE BROWSER</div>
+      <div class="h1 anim-2" style="color:var(--orange);font-size:80px">AGENTS OWN.</div>
+      <div class="body anim-3" style="margin-top:16px;max-width:520px;font-size:16px">Claude Code runs your terminal.<br>Kitsune runs your web.<br><br>Built in Rust. Secured by the compiler.<br>Agent-first, privacy-first, from day one.</div>
+      <div class="links anim-4">
+        <a class="link-btn primary" href="https://kengine.tech" target="_blank">kengine.tech →</a>
+        <a class="link-btn" href="https://github.com/AbdulHannanF/k-browser" target="_blank">GitHub (Apache 2.0)</a>
+        <a class="link-btn" href="#" target="_blank">Join Waitlist</a>
+      </div>
+    </div>
+    <div class="right-info anim-3">
+      <div class="info-row"><span class="info-key">Product</span><span class="info-val">KitsuneEngine</span></div>
+      <div class="info-row"><span class="info-key">Language</span><span class="info-val">Rust (100%)</span></div>
+      <div class="info-row"><span class="info-key">License</span><span class="info-val">Apache 2.0</span></div>
+      <div class="info-row"><span class="info-key">AMD Integration</span><span class="info-val">Ollama + ROCm</span></div>
+      <div class="info-row"><span class="info-key">Status</span><span class="info-val">Demo / Pre-launch</span></div>
+      <div class="info-row"><span class="info-key">Website</span><span class="info-val">kengine.tech</span></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Controls -->
+<div class="controls">
+  <button id="prevBtn" onclick="prevSlide()">◀</button>
+  <div class="dot-track" id="dotTrack"></div>
+  <button id="nextBtn" onclick="nextSlide()">▶</button>
+  <button onclick="toggleAuto()" id="autoBtn" style="font-size:12px;padding:4px 10px;border:1px solid var(--border);border-radius:12px;background:var(--card)">⏵ AUTO</button>
+</div>
+
+<script>
+  const slides = document.querySelectorAll('.slide');
+  const dotTrack = document.getElementById('dotTrack');
+  const progress = document.getElementById('progress');
+  const slideLabel = document.getElementById('slideLabel');
+  let current = 0;
+  let autoTimer = null;
+  let isAuto = false;
+
+  // Build dots
+  slides.forEach((_, i) => {
+    const dot = document.createElement('div');
+    dot.className = 'dot' + (i === 0 ? ' active' : '');
+    dot.onclick = () => goTo(i);
+    dotTrack.appendChild(dot);
+  });
+
+  function goTo(n) {
+    slides[current].classList.remove('active');
+    dotTrack.children[current].classList.remove('active');
+    current = (n + slides.length) % slides.length;
+    slides[current].classList.add('active');
+    dotTrack.children[current].classList.add('active');
+    progress.style.width = ((current + 1) / slides.length * 100) + '%';
+    slideLabel.textContent = String(current + 1).padStart(2,'0') + ' / ' + String(slides.length).padStart(2,'0');
+  }
+
+  function nextSlide() { goTo(current + 1); }
+  function prevSlide() { goTo(current - 1); }
+
+  function toggleAuto() {
+    isAuto = !isAuto;
+    document.getElementById('autoBtn').textContent = isAuto ? '⏸ AUTO' : '⏵ AUTO';
+    document.getElementById('autoBtn').style.color = isAuto ? 'var(--orange)' : '';
+    if (isAuto) {
+      autoTimer = setInterval(nextSlide, 5000);
+    } else {
+      clearInterval(autoTimer);
+    }
+  }
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') nextSlide();
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') prevSlide();
+    if (e.key === ' ') { e.preventDefault(); toggleAuto(); }
+  });
+
+  // Init progress
+  progress.style.width = (1 / slides.length * 100) + '%';
+
+  // ─── Full-screen scale ─────────────────────────────────
+  const DESIGN_W = 1280;
+  const DESIGN_H = 720;
+  const slidesEl = document.getElementById('slides');
+
+  function scaleSlides() {
+    const scaleX = window.innerWidth  / DESIGN_W;
+    const scaleY = window.innerHeight / DESIGN_H;
+    const scale  = Math.min(scaleX, scaleY) * 0.85;
+    slidesEl.style.transform = `scale(${scale})`;
+    // Also scale the fixed controls so they stay proportional
+    document.querySelector('.controls').style.transform = `translateX(-50%) scale(${Math.max(scale, 0.6)})`;
+  }
+
+  scaleSlides();
+  window.addEventListener('resize', scaleSlides);
+</script>
+</body>
+</html>
