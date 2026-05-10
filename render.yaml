@@ -1,13 +1,8 @@
 services:
   - type: web
     name: kitsune-engine-demo
-    runtime: static
-    staticPublishPath: .
-    headers:
-      - path: /*
-        name: Cache-Control
-        value: no-cache
-    routes:
-      - type: rewrite
-        source: /
-        destination: /KitsuneEngine_Demo_Video.html
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: PORT
+        value: 80
