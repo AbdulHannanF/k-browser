@@ -4,44 +4,86 @@ use crate::theme::KitsuneTheme;
 use eframe::egui;
 
 pub fn top_bar(ctx: &egui::Context, browser: &mut KitsuneBrowser) {
-    // ── Row 1: Tab strip ─────────────────────────────────────────────────
+    // ── Row 1: Tab strip + Window controls ──────────────────────────────────
     egui::TopBottomPanel::top("tab_strip")
         .exact_height(34.0)
         .frame(
             egui::Frame::none()
                 .fill(KitsuneTheme::BG)
-                .inner_margin(egui::Margin { left: 10.0, right: 10.0, top: 4.0, bottom: 0.0 }),
+                .inner_margin(egui::Margin { left: 10.0, right: 0.0, top: 4.0, bottom: 0.0 }),
         )
         .show(ctx, |ui| {
-            ui.horizontal_centered(|ui| {
-                // Logo
-                ui.horizontal(|ui| {
-                    ui.spacing_mut().item_spacing.x = 0.0;
-                    ui.label(
-                        egui::RichText::new("KIT")
-                            .size(14.0)
-                            .strong()
-                            .color(KitsuneTheme::TEXT1),
-                    );
-                    ui.label(
-                        egui::RichText::new("SUNE")
-                            .size(14.0)
-                            .strong()
-                            .color(KitsuneTheme::AMBER),
-                    );
-                });
-                ui.add_space(6.0);
-                ui.add(egui::Separator::default().vertical().spacing(6.0));
-                ui.add_space(2.0);
+            let panel_rect = ui.max_rect();
 
-                // Tabs
-                let tab_action = tab_bar(ui, browser);
-                match tab_action {
-                    TabAction::None => {}
-                    TabAction::Switch(id) => browser.switch_tab(id),
-                    TabAction::Close(id) => browser.close_tab(id),
-                    TabAction::New => browser.new_tab(),
+            // Register the drag zone FIRST so buttons added later take hover/click priority.
+            // (In egui, the last registered widget for a given point wins interaction.)
+            let drag = ui.interact(
+                panel_rect,
+                egui::Id::new("titlebar_drag"),
+                egui::Sense::click_and_drag(),
+            );
+            if drag.dragged() {
+                ctx.send_viewport_cmd(egui::ViewportCommand::StartDrag);
+            }
+            if drag.double_clicked() {
+                let is_max = ctx.input(|i| i.viewport().maximized.unwrap_or(false));
+                ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(!is_max));
+            }
+
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                let is_max = ctx.input(|i| i.viewport().maximized.unwrap_or(false));
+
+                // ── Window controls (right → left: ✕, □, ─) ──────────────
+                if wc_btn(ui, WcIcon::Close, "Close", true).clicked() {
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                 }
+                if wc_btn(
+                    ui,
+                    WcIcon::MaxRestore,
+                    if is_max { "Restore" } else { "Maximize" },
+                    false,
+                )
+                .clicked()
+                {
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(!is_max));
+                }
+                if wc_btn(ui, WcIcon::Minimize, "Minimize", false).clicked() {
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(true));
+                }
+
+                ui.add_space(2.0);
+                ui.add(egui::Separator::default().vertical().spacing(4.0));
+                ui.add_space(4.0);
+
+                // ── Logo + Tabs fill the left ─────────────────────────────
+                ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 0.0;
+                        ui.label(
+                            egui::RichText::new("KIT")
+                                .size(14.0)
+                                .strong()
+                                .color(KitsuneTheme::TEXT1),
+                        );
+                        ui.label(
+                            egui::RichText::new("SUNE")
+                                .size(14.0)
+                                .strong()
+                                .color(KitsuneTheme::AMBER),
+                        );
+                    });
+                    ui.add_space(6.0);
+                    ui.add(egui::Separator::default().vertical().spacing(6.0));
+                    ui.add_space(2.0);
+
+                    let tab_action = tab_bar(ui, browser);
+                    match tab_action {
+                        TabAction::None => {}
+                        TabAction::Switch(id) => browser.switch_tab(id),
+                        TabAction::Close(id) => browser.close_tab(id),
+                        TabAction::New => browser.new_tab(),
+                    }
+                });
             });
         });
 
@@ -192,4 +234,66 @@ fn nav_btn(ui: &mut egui::Ui, label: &str, tooltip: &str) -> egui::Response {
     .frame(false)
     .min_size(egui::vec2(24.0, 24.0));
     ui.add(btn).on_hover_text(tooltip)
+}
+
+enum WcIcon {
+    Minimize,
+    MaxRestore,
+    Close,
+}
+
+/// Window control button drawn with vector shapes (avoids font-glyph availability issues).
+/// `is_close` gives the close button a red hover background.
+fn wc_btn(ui: &mut egui::Ui, icon: WcIcon, tooltip: &str, is_close: bool) -> egui::Response {
+    let (rect, response) = ui.allocate_exact_size(egui::vec2(34.0, 26.0), egui::Sense::click());
+    let response = response.on_hover_text(tooltip);
+
+    if ui.is_rect_visible(rect) {
+        let hovered = response.hovered();
+        let bg = if hovered && is_close {
+            egui::Color32::from_rgb(196, 43, 28)
+        } else if hovered {
+            egui::Color32::from_rgba_unmultiplied(255, 255, 255, 22)
+        } else {
+            egui::Color32::TRANSPARENT
+        };
+        ui.painter().rect_filled(rect, egui::Rounding::ZERO, bg);
+
+        let ink = if hovered && is_close { egui::Color32::WHITE } else { KitsuneTheme::TEXT1 };
+        let stroke = egui::Stroke::new(1.2, ink);
+        let c = rect.center();
+
+        match icon {
+            WcIcon::Minimize => {
+                // Horizontal bar
+                let y = c.y + 2.0;
+                ui.painter().line_segment(
+                    [egui::pos2(c.x - 5.0, y), egui::pos2(c.x + 5.0, y)],
+                    stroke,
+                );
+            }
+            WcIcon::MaxRestore => {
+                // Square outline
+                ui.painter().rect_stroke(
+                    egui::Rect::from_center_size(c, egui::vec2(10.0, 9.0)),
+                    egui::Rounding::ZERO,
+                    stroke,
+                );
+            }
+            WcIcon::Close => {
+                // Diagonal cross
+                let d = 4.5_f32;
+                ui.painter().line_segment(
+                    [egui::pos2(c.x - d, c.y - d), egui::pos2(c.x + d, c.y + d)],
+                    stroke,
+                );
+                ui.painter().line_segment(
+                    [egui::pos2(c.x + d, c.y - d), egui::pos2(c.x - d, c.y + d)],
+                    stroke,
+                );
+            }
+        }
+    }
+
+    response
 }
