@@ -11,6 +11,7 @@
 // 5. Agent lineage is tracked — sub-agents inherit intersection of parent constraints
 
 pub mod action;
+pub mod agents;
 pub mod ai_client;
 pub mod captcha;
 pub use captcha::{CaptchaAgent, CaptchaKind, CaptchaSolverConfig};

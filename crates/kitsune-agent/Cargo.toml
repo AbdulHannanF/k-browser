@@ -24,6 +24,7 @@ sha2 = { workspace = true }
 dirs = { workspace = true }
 pdf-extract = "0.7"
 docx-rs = "0.4"
+urlencoding = "2"
 
 kitsune-vault = { path = "../kitsune-vault" }
 kitsune-hil = { path = "../kitsune-hil" }
