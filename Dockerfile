@@ -1,22 +1,24 @@
-# ── KitsuneEngine Demo Pitch Deck ──────────────────────────────────────────
-# Serves the static HTML presentation via nginx on port 80.
-# Deploy to Render as a "Web Service" (Docker), or run locally:
+# KitsuneEngine Demo Pitch Deck
+# nginx listens on $PORT (injected by Render at runtime, defaults to 8080/10000)
+#
+# Run locally:
 #   docker build -t kitsune-demo .
-#   docker run -p 8080:80 kitsune-demo
-# ---------------------------------------------------------------------------
+#   PORT=8080 docker run -p 8080:8080 -e PORT=8080 kitsune-demo
 
 FROM nginx:alpine
 
-# Remove the default nginx placeholder page
+# Remove default placeholder
 RUN rm -rf /usr/share/nginx/html/*
 
-# Copy the presentation and supporting files
+# Copy presentation files
 COPY KitsuneEngine_Demo_Video.html /usr/share/nginx/html/
 COPY index.html                    /usr/share/nginx/html/
 
-# Minimal nginx config: serve on port 80, gzip on, cache headers
-RUN printf 'server {\n\
-    listen 80;\n\
+# Use nginx's template mechanism — envsubst replaces $PORT before nginx starts
+# Templates in /etc/nginx/templates/ are processed automatically on container start
+RUN mkdir -p /etc/nginx/templates && \
+    printf 'server {\n\
+    listen ${PORT};\n\
     root /usr/share/nginx/html;\n\
     index index.html;\n\
     gzip on;\n\
@@ -25,8 +27,9 @@ RUN printf 'server {\n\
     location / {\n\
         try_files $uri $uri/ /index.html;\n\
     }\n\
-}\n' > /etc/nginx/conf.d/default.conf
+}\n' > /etc/nginx/templates/default.conf.template
 
-EXPOSE 80
+# Render sets $PORT at runtime — expose the same default for local dev
+EXPOSE 8080
 
 CMD ["nginx", "-g", "daemon off;"]

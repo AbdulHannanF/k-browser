@@ -3,6 +3,3 @@ services:
     name: kitsune-engine-demo
     runtime: docker
     dockerfilePath: ./Dockerfile
-    envVars:
-      - key: PORT
-        value: 80
