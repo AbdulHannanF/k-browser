@@ -207,13 +207,19 @@ impl ProfileIndexer {
             ));
         }
 
-        const MAX_PROFILE_TEXT_CHARS: usize = 32_000;
-        if raw_text.len() > MAX_PROFILE_TEXT_CHARS {
+        // Byte limit; walk back to a char boundary to avoid truncating mid-codepoint.
+        const MAX_PROFILE_TEXT_BYTES: usize = 32_000;
+        if raw_text.len() > MAX_PROFILE_TEXT_BYTES {
+            let mut safe_len = MAX_PROFILE_TEXT_BYTES;
+            while !raw_text.is_char_boundary(safe_len) {
+                safe_len -= 1;
+            }
             tracing::warn!(
                 original_len = raw_text.len(),
+                truncated_len = safe_len,
                 "Profile text truncated to avoid token overflow"
             );
-            raw_text.truncate(MAX_PROFILE_TEXT_CHARS);
+            raw_text.truncate(safe_len);
         }
 
         let prompt = format!(
