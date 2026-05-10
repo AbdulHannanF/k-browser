@@ -459,6 +459,26 @@ fn start_agent_run(browser: &mut KitsuneBrowser) {
     browser.runtime().spawn(async move {
         run_in_process_agent(spec, cmd, context, vault, hil_gate, webview_tx, agent_tx, file_perm_slot, stop_flag).await;
     });
+
+    // ── Orchestrator parallel path ────────────────────────────────────────
+    // When the orchestrator is available AND a profile has been indexed, run
+    // the goal through the full multi-agent pipeline alongside the LLM loop.
+    // This is additive — both paths can run concurrently; the orchestrator
+    // result is logged but does not affect the LLM agent's execution.
+    if let (Some(orch), Some(summary)) =
+        (browser.orchestrator.clone(), browser.profile_summary.clone())
+    {
+        let goal = browser.agent_command.trim().to_string();
+        if !goal.is_empty() {
+            std::thread::spawn(move || {
+                let rt = tokio::runtime::Runtime::new().expect("tokio rt for orchestrator");
+                match rt.block_on(orch.run(&goal, &summary)) {
+                    Ok(results) => tracing::info!("Orchestrator results: {:?}", results),
+                    Err(e) => tracing::error!("Orchestrator error: {e}"),
+                }
+            });
+        }
+    }
 }
 
 fn build_runtime_spec(browser: &KitsuneBrowser) -> AgentSpec {

@@ -1,4 +1,6 @@
 use crate::app::KitsuneBrowser;
+use crate::panels::profile_panel::profile_panel;
+use crate::panels::task_graph_panel::task_graph_panel;
 use crate::theme::KitsuneTheme;
 use eframe::egui;
 
@@ -89,6 +91,44 @@ pub fn session_panel(ctx: &egui::Context, browser: &KitsuneBrowser) {
                     vault_item(ui, "👤", "demo@kitsune.ai", "token");
                     vault_item(ui, "💳", "•••• 4242", "locked");
                     vault_item(ui, "🏠", "Home address", "token");
+                });
+
+            paint_separator(ui);
+
+            // ── Profile ───────────────────────────────────────────────────
+            egui::Frame::none()
+                .inner_margin(egui::Margin::symmetric(12.0, 6.0))
+                .show(ui, |ui| {
+                    egui::CollapsingHeader::new(
+                        egui::RichText::new("PROFILE")
+                            .size(10.0)
+                            .strong()
+                            .color(KitsuneTheme::TEXT2)
+                            .family(egui::FontFamily::Monospace),
+                    )
+                    .default_open(false)
+                    .show(ui, |ui| {
+                        profile_panel(ui, browser.profile_summary.as_ref());
+                    });
+                });
+
+            paint_separator(ui);
+
+            // ── Task Graph ────────────────────────────────────────────────
+            egui::Frame::none()
+                .inner_margin(egui::Margin::symmetric(12.0, 6.0))
+                .show(ui, |ui| {
+                    egui::CollapsingHeader::new(
+                        egui::RichText::new("TASK GRAPH")
+                            .size(10.0)
+                            .strong()
+                            .color(KitsuneTheme::TEXT2)
+                            .family(egui::FontFamily::Monospace),
+                    )
+                    .default_open(false)
+                    .show(ui, |ui| {
+                        task_graph_panel(ui, &browser.task_nodes);
+                    });
                 });
         });
 }

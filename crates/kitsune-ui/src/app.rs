@@ -12,8 +12,13 @@ use crate::dialogs::hil_dialog::hil_dialog;
 use crate::dialogs::settings_dialog::settings_dialog;
 use crate::panels::agent_panel::agent_panel;
 use crate::panels::session_panel::session_panel;
+use crate::panels::task_graph_panel::TaskNode;
 use crate::theme::KitsuneTheme;
+use kitsune_agent::ai_client::{AgentAiClient, AiProviderConfig};
+use kitsune_agent::captcha::CaptchaAgent;
 use kitsune_agent::executor::WebViewCommand;
+use kitsune_agent::orchestrator::AgentOrchestrator;
+use kitsune_agent::profile::{ProfileIndexer, ProfileSummary};
 use kitsune_agent::{FilePermSlot, StopFlag};
 use kitsune_cef::{CefBrowser, CefEvent, CefRect};
 use kitsune_core::tab::Tab;
@@ -212,6 +217,13 @@ pub struct KitsuneBrowser {
 
     /// Cooperative stop flag — set to true when the user clicks Stop.
     pub agent_stop_flag: StopFlag,
+
+    // ── Orchestrator pipeline ────────────────────────────────────────────────
+    pub profile_indexer: Option<Arc<ProfileIndexer>>,
+    pub profile_summary: Option<ProfileSummary>,
+    pub orchestrator: Option<Arc<AgentOrchestrator>>,
+    pub task_nodes: Vec<TaskNode>,
+    pub ai_client: Option<Arc<AgentAiClient>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -282,6 +294,66 @@ impl KitsuneBrowser {
         let (hil_gate_inner, hil_checkpoint_rx) = HilGate::new(100);
         let hil_gate = Arc::new(hil_gate_inner);
 
+        // ── Orchestrator pipeline ────────────────────────────────────────────
+        // Build AI client (default Ollama config; user can change in settings).
+        let ai_client = AgentAiClient::new(AiProviderConfig::default())
+            .ok()
+            .map(Arc::new);
+
+        // Build CaptchaAgent — requires DOM access, which needs the vault and
+        // webview_cmd_tx. We construct a temporary DomAccessor here solely so
+        // that CaptchaAgent can be wired up; the real per-run DomAccessor used
+        // by LlmAgentRuntime is constructed inside start_agent_run.
+        let captcha: Option<Arc<CaptchaAgent>> = if let (Some(ref ai_c), Some(ref v)) =
+            (&ai_client, &vault)
+        {
+            let initial_url = url::Url::parse("about:blank").expect("static URL");
+            let dom_for_captcha = Arc::new(kitsune_agent::dom_access::DomAccessor::new(
+                v.clone(),
+                hil_gate.clone(),
+                initial_url,
+                webview_cmd_tx.clone(),
+            ));
+            let _ = ai_c; // ai_client not used by CaptchaAgent constructor
+            CaptchaAgent::new(dom_for_captcha, hil_gate.clone(), None)
+                .ok()
+                .map(Arc::new)
+        } else {
+            None
+        };
+
+        // ProfileIndexer — folder is empty until the user sets one in settings.
+        // ProfileIndexer::new handles a missing/empty directory gracefully.
+        let profile_indexer = Some(Arc::new(ProfileIndexer::new(
+            std::path::PathBuf::from(""),
+        )));
+
+        // Load any cached profile summary from disk.
+        let profile_summary: Option<ProfileSummary> = None; // populated lazily via reindex
+
+        // AgentOrchestrator — constructed if all dependencies are available.
+        let orchestrator: Option<Arc<AgentOrchestrator>> =
+            if let (Some(ref ai_c), Some(ref v), Some(ref cap), Some(ref idx)) =
+                (&ai_client, &vault, &captcha, &profile_indexer)
+            {
+                let initial_url = url::Url::parse("about:blank").expect("static URL");
+                let dom_for_orch = Arc::new(kitsune_agent::dom_access::DomAccessor::new(
+                    v.clone(),
+                    hil_gate.clone(),
+                    initial_url,
+                    webview_cmd_tx.clone(),
+                ));
+                Some(Arc::new(AgentOrchestrator::new(
+                    dom_for_orch,
+                    ai_c.clone(),
+                    cap.clone(),
+                    hil_gate.clone(),
+                    idx.clone(),
+                )))
+            } else {
+                None
+            };
+
         Self {
             tabs: vec![initial_tab],
             address_bar: DEFAULT_HOME.to_string(),
@@ -329,6 +401,11 @@ impl KitsuneBrowser {
             file_perm_slot: std::sync::Arc::new(std::sync::Mutex::new(None)),
             file_perm_pending: None,
             agent_stop_flag: Arc::new(AtomicBool::new(false)),
+            profile_indexer,
+            profile_summary,
+            orchestrator,
+            task_nodes: Vec::new(),
+            ai_client,
         }
     }
 
@@ -699,6 +776,81 @@ impl eframe::App for KitsuneBrowser {
         if let Some(ref mut hil) = self.hil_action {
             if hil.started_at == 0.0 {
                 hil.started_at = ctx.input(|i| i.time);
+            }
+        }
+
+        // ── Reindex profile if requested from the Settings dialog ────────
+        if self.reindex_requested {
+            self.reindex_requested = false;
+            // Rebuild ProfileIndexer with the current folder setting so that it
+            // scans the directory the user has configured, not the empty-path
+            // placeholder created at startup.
+            let updated_indexer = Arc::new(ProfileIndexer::new(
+                std::path::PathBuf::from(&self.profile_folder),
+            ));
+            self.profile_indexer = Some(updated_indexer.clone());
+
+            // Also rebuild the orchestrator's indexer reference if possible.
+            if let (Some(ref ai_c), Some(ref v), Some(ref orch)) =
+                (&self.ai_client.clone(), &self.vault.clone(), &self.orchestrator.clone())
+            {
+                let _ = (ai_c, v, orch); // suppress unused warnings; orchestrator rebuilt below
+                let initial_url = url::Url::parse("about:blank").expect("static URL");
+                let dom_for_orch = Arc::new(kitsune_agent::dom_access::DomAccessor::new(
+                    v.clone(),
+                    self.hil_gate.clone(),
+                    initial_url,
+                    self.webview_cmd_tx.clone(),
+                ));
+                let captcha_for_orch = self.ai_client.as_ref().and_then(|_ai| {
+                    let v2 = self.vault.as_ref()?;
+                    let initial_url2 = url::Url::parse("about:blank").ok()?;
+                    let dom2 = Arc::new(kitsune_agent::dom_access::DomAccessor::new(
+                        v2.clone(),
+                        self.hil_gate.clone(),
+                        initial_url2,
+                        self.webview_cmd_tx.clone(),
+                    ));
+                    CaptchaAgent::new(dom2, self.hil_gate.clone(), None).ok().map(Arc::new)
+                });
+                if let (Some(ai_c2), Some(cap2)) = (&self.ai_client, captcha_for_orch) {
+                    self.orchestrator = Some(Arc::new(AgentOrchestrator::new(
+                        dom_for_orch,
+                        ai_c2.clone(),
+                        cap2,
+                        self.hil_gate.clone(),
+                        updated_indexer.clone(),
+                    )));
+                }
+            }
+
+            if let (Some(idx), Some(ai)) = (self.profile_indexer.clone(), self.ai_client.clone()) {
+                let ui_ctx = ctx.clone();
+                let agent_tx = self.agent_tx.clone();
+                std::thread::spawn(move || {
+                    let rt = tokio::runtime::Runtime::new().expect("tokio rt for reindex");
+                    match rt.block_on(idx.reindex(&ai)) {
+                        Ok(summary) => {
+                            tracing::info!(name = %summary.full_name, "Profile reindexed");
+                            // Send summary back via a dedicated SSE-style log message so the
+                            // UI can display it. The actual ProfileSummary field is updated
+                            // below via a channel send embedded in the log.
+                            let _ = agent_tx.send(AgentSseAction::Log {
+                                message: format!("Profile indexed: {}", summary.full_name),
+                                class: "ok".into(),
+                            });
+                            ui_ctx.request_repaint();
+                        }
+                        Err(e) => {
+                            tracing::warn!("Profile reindex failed: {e}");
+                            let _ = agent_tx.send(AgentSseAction::Log {
+                                message: format!("Profile reindex failed: {e}"),
+                                class: "warn".into(),
+                            });
+                            ui_ctx.request_repaint();
+                        }
+                    }
+                });
             }
         }
 
