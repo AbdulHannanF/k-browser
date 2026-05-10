@@ -86,7 +86,13 @@ impl BookingAgent {
             .send()
             .await
         {
-            Ok(r) => r.text().await.unwrap_or_default(),
+            Ok(r) => {
+                if !r.status().is_success() {
+                    tracing::warn!(status = %r.status(), "Flights fetch returned non-200");
+                    return Ok(vec![]);
+                }
+                r.text().await.unwrap_or_default()
+            }
             Err(e) => {
                 tracing::warn!("Flights fetch failed: {e}");
                 return Ok(vec![]);

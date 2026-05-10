@@ -84,6 +84,8 @@ User profile:
         let search_agent = SearchAgent::new(self.dom.clone(), self.ai.clone());
         let form_agent = FormAgent::new(self.dom.clone(), self.ai.clone(), self.captcha.clone(), self.hil_gate.clone());
         let submit_agent = SubmitAgent::new(self.dom.clone(), self.hil_gate.clone());
+        let booking_agent = BookingAgent::new(self.ai.clone())
+            .map_err(|e| AgentError::Internal(e.to_string()))?;
 
         for task in tasks {
             match task {
@@ -115,8 +117,6 @@ User profile:
                     results.push(format!("Account creation on {site} as {username} — awaiting HIL gate"));
                 }
                 SubTask::Booking { origin, destination, date, criteria } => {
-                    let booking_agent = BookingAgent::new(self.ai.clone())
-                        .map_err(|e| AgentError::Internal(e.to_string()))?;
                     let offers = booking_agent.fetch_offers(&origin, &destination, &date).await?;
                     if let Some(best) = criteria.rank(&offers) {
                         results.push(format!(
