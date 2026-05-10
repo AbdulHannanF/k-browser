@@ -1,4 +1,4 @@
-use crate::app::{KitsuneBrowser, SettingsProvider, SettingsTab};
+use crate::app::{CloudPreset, KitsuneBrowser, SettingsProvider, SettingsTab};
 use crate::theme::KitsuneTheme;
 use eframe::egui;
 
@@ -96,8 +96,8 @@ fn render_llm_tab(ui: &mut egui::Ui, browser: &mut KitsuneBrowser) {
         let prev = browser.settings_provider;
         ui.radio_value(
             &mut browser.settings_provider,
-            SettingsProvider::OpenAiCompatible,
-            "OpenAI-compatible API",
+            SettingsProvider::Cloud,
+            "Cloud API",
         );
         ui.add_space(8.0);
         ui.radio_value(
@@ -107,12 +107,10 @@ fn render_llm_tab(ui: &mut egui::Ui, browser: &mut KitsuneBrowser) {
         );
         if browser.settings_provider != prev {
             match browser.settings_provider {
-                SettingsProvider::OpenAiCompatible => {
-                    browser.settings_endpoint =
-                        "https://api.openai.com/v1/chat/completions".to_string();
-                    if browser.settings_model.is_empty() {
-                        browser.settings_model = "gpt-4o-mini".to_string();
-                    }
+                SettingsProvider::Cloud => {
+                    let preset = browser.settings_cloud_preset;
+                    browser.settings_endpoint = preset.default_endpoint().to_string();
+                    browser.settings_model = preset.default_model().to_string();
                 }
                 SettingsProvider::Ollama => {
                     browser.settings_endpoint = "http://localhost:11434".to_string();
@@ -124,6 +122,46 @@ fn render_llm_tab(ui: &mut egui::Ui, browser: &mut KitsuneBrowser) {
         }
     });
 
+    // ── Preset picker (Cloud only) ────────────────────────────────────────
+    if browser.settings_provider == SettingsProvider::Cloud {
+        ui.add_space(8.0);
+        ui.label(
+            egui::RichText::new("PRESET")
+                .size(10.0)
+                .strong()
+                .color(KitsuneTheme::TEXT2)
+                .family(egui::FontFamily::Monospace),
+        );
+        ui.add_space(4.0);
+        ui.horizontal(|ui| {
+            for preset in [
+                CloudPreset::Claude,
+                CloudPreset::OpenAI,
+                CloudPreset::Gemini,
+                CloudPreset::Groq,
+                CloudPreset::OpenRouter,
+                CloudPreset::Custom,
+            ] {
+                let active = browser.settings_cloud_preset == preset;
+                let fill = if active { KitsuneTheme::AMBER } else { KitsuneTheme::BG3 };
+                let text_color = if active { egui::Color32::BLACK } else { KitsuneTheme::TEXT1 };
+                let btn = egui::Button::new(
+                    egui::RichText::new(preset.label()).color(text_color).size(10.0).strong(),
+                )
+                .fill(fill)
+                .min_size(egui::vec2(56.0, 22.0));
+                if ui.add(btn).clicked() && browser.settings_cloud_preset != preset {
+                    browser.settings_cloud_preset = preset;
+                    browser.settings_endpoint = preset.default_endpoint().to_string();
+                    browser.settings_model = preset.default_model().to_string();
+                    browser.settings_saved = false;
+                    browser.settings_test_status = None;
+                }
+                ui.add_space(2.0);
+            }
+        });
+    }
+
     ui.add_space(14.0);
 
     // ── Per-provider fields ──────────────────────────────────────────────
@@ -131,26 +169,24 @@ fn render_llm_tab(ui: &mut egui::Ui, browser: &mut KitsuneBrowser) {
         .num_columns(2)
         .spacing([12.0, 10.0])
         .show(ui, |ui| {
-            if browser.settings_provider == SettingsProvider::OpenAiCompatible {
+            if browser.settings_provider == SettingsProvider::Cloud {
                 ui.label(egui::RichText::new("API Key").color(KitsuneTheme::TEXT1));
                 ui.add(
                     egui::TextEdit::singleline(&mut browser.settings_api_key)
                         .password(true)
                         .desired_width(260.0)
-                        .hint_text("sk-..."),
+                        .hint_text(browser.settings_cloud_preset.key_hint()),
                 );
                 ui.end_row();
             }
 
             let endpoint_label = match browser.settings_provider {
-                SettingsProvider::OpenAiCompatible => "Endpoint",
+                SettingsProvider::Cloud => "Endpoint",
                 SettingsProvider::Ollama => "Ollama URL",
             };
             ui.label(egui::RichText::new(endpoint_label).color(KitsuneTheme::TEXT1));
             let endpoint_hint = match browser.settings_provider {
-                SettingsProvider::OpenAiCompatible => {
-                    "https://api.openai.com/v1/chat/completions"
-                }
+                SettingsProvider::Cloud => browser.settings_cloud_preset.default_endpoint(),
                 SettingsProvider::Ollama => "http://localhost:11434",
             };
             ui.add(
@@ -162,7 +198,7 @@ fn render_llm_tab(ui: &mut egui::Ui, browser: &mut KitsuneBrowser) {
 
             ui.label(egui::RichText::new("Model").color(KitsuneTheme::TEXT1));
             let model_hint = match browser.settings_provider {
-                SettingsProvider::OpenAiCompatible => "gpt-4o-mini",
+                SettingsProvider::Cloud => browser.settings_cloud_preset.default_model(),
                 SettingsProvider::Ollama => "llama3.2",
             };
             ui.add(
@@ -188,8 +224,9 @@ fn render_llm_tab(ui: &mut egui::Ui, browser: &mut KitsuneBrowser) {
     } else {
         ui.label(
             egui::RichText::new(
-                "Works with OpenAI, Groq, Together, OpenRouter, or any other provider \
-                 that exposes an OpenAI /v1/chat/completions endpoint.",
+                "Works with Claude (Anthropic), OpenAI, Gemini (Google), Groq, OpenRouter, \
+                 or any provider with an OpenAI-compatible /v1/chat/completions endpoint. \
+                 Select a preset above to auto-fill the URL.",
             )
             .size(11.0)
             .color(KitsuneTheme::TEXT2),
@@ -319,7 +356,7 @@ fn render_agents_tab(ui: &mut egui::Ui, browser: &mut KitsuneBrowser) {
     ui.add_space(8.0);
 
     ui.label(
-        egui::RichText::new("Model slots (Ollama model names or provider IDs):")
+        egui::RichText::new("Model names or provider IDs:")
             .color(KitsuneTheme::TEXT1)
             .size(12.0),
     );
