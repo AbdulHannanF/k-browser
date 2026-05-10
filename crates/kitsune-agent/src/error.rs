@@ -46,6 +46,15 @@ pub enum AgentError {
 
     #[error("Invalid parameter '{param}': {reason}")]
     InvalidParameters { param: String, reason: String },
+
+    #[error("Swarm coordinator failed: {0}")]
+    SwarmCoordinatorFailed(String),
+
+    #[error("Swarm worker '{worker_id}' failed: {reason}")]
+    SwarmWorkerFailed { worker_id: String, reason: String },
+
+    #[error("Agent operation cancelled")]
+    Cancelled,
 }
 
 impl From<VaultError> for AgentError {

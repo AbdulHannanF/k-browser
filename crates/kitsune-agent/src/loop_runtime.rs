@@ -39,7 +39,7 @@ enum LlmBackend {
 }
 
 impl LlmBackend {
-    async fn chat(&self, system: &str, history: Vec<(String, String)>) -> Result<String, AgentError> {
+    async fn chat(&self, system: &str, history: Vec<(String, String)>) -> Result<(String, u32, u32), AgentError> {
         match self {
             Self::Ollama(ollama) => ollama.chat(system, history).await,
             Self::Cloud { client, url, api_key, model } => {
@@ -98,10 +98,13 @@ impl LlmBackend {
                     .await
                     .map_err(|e| AgentError::ExecutionError(format!("Cloud LLM bad JSON: {}", e)))?;
 
-                parsed["choices"][0]["message"]["content"]
+                let input_tokens = parsed["usage"]["prompt_tokens"].as_u64().unwrap_or(0) as u32;
+                let output_tokens = parsed["usage"]["completion_tokens"].as_u64().unwrap_or(0) as u32;
+                let content = parsed["choices"][0]["message"]["content"]
                     .as_str()
                     .map(|s| s.to_string())
-                    .ok_or_else(|| AgentError::ExecutionError("empty cloud LLM response".into()))
+                    .ok_or_else(|| AgentError::ExecutionError("empty cloud LLM response".into()))?;
+                Ok((content, input_tokens, output_tokens))
             }
         }
     }
@@ -116,13 +119,15 @@ pub type FilePermSlot = Arc<Mutex<Option<(String, oneshot::Sender<bool>)>>>;
 /// at the next iteration boundary. Passed as `Arc<AtomicBool>`.
 pub type StopFlag = Arc<AtomicBool>;
 
-const MAX_ITERATIONS: usize = 15;
+const MAX_ITERATIONS: usize = 40;
 
 /// A status update streamed back to the UI as the agent runs.
 #[derive(Debug, Clone)]
 pub enum AgentEvent {
     /// Free-form log line.
     Log(String),
+    /// Indented sub-step (action being executed).
+    Step(String),
     /// Model reasoning extracted from a `<think>…</think>` block.
     Thinking(String),
     /// The agent navigated to a URL — the UI should mirror this in the address bar / tab.
@@ -131,6 +136,34 @@ pub enum AgentEvent {
     Done(String),
     /// Loop terminated with an error.
     Error(String),
+    /// Cumulative token counts for this run, emitted after each LLM call.
+    TokenUsage { input: u32, output: u32 },
+    /// Swarm worker status update. Emitted by coordinator and workers.
+    SwarmUpdate {
+        swarm_id: String,
+        worker_id: String,
+        role: String,
+        status: String,
+        message: String,
+        tool_calls_used: u32,
+    },
+    /// Coordinator finished planning — task list is ready.
+    SwarmPlanReady {
+        swarm_id: String,
+        goal: String,
+        tasks: Vec<crate::swarm::types::SwarmTask>,
+    },
+    /// Final swarm answer — all workers done, reconciliation complete.
+    SwarmDone {
+        swarm_id: String,
+        final_answer: String,
+        total_tool_calls: u32,
+    },
+    /// Swarm-level error — coordinator or all workers failed.
+    SwarmError {
+        swarm_id: String,
+        error: String,
+    },
 }
 
 /// LLM-driven runtime. One instance per `run()` invocation.
@@ -144,6 +177,18 @@ pub struct LlmAgentRuntime {
     events: Option<mpsc::UnboundedSender<AgentEvent>>,
     file_perm_slot: Option<FilePermSlot>,
     stop_flag: Option<StopFlag>,
+    /// Extra specialist context injected into the system prompt (e.g. from agent cards).
+    agent_context: Option<String>,
+    /// Shared mutex serializing WebView navigate/click/fill across swarm workers.
+    /// `None` in single-agent mode.
+    nav_lock: Option<Arc<tokio::sync::Mutex<()>>>,
+    /// Shared mutex serializing HIL checkpoint dialogs across swarm workers.
+    /// `None` in single-agent mode.
+    hil_lock: Option<Arc<tokio::sync::Mutex<()>>>,
+    /// Worker ID for log prefixing. `None` in single-agent mode.
+    worker_id: Option<String>,
+    /// Swarm ID this worker belongs to. `None` in single-agent mode.
+    swarm_id: Option<String>,
 }
 
 impl LlmAgentRuntime {
@@ -171,6 +216,11 @@ impl LlmAgentRuntime {
             events: None,
             file_perm_slot: None,
             stop_flag: None,
+            agent_context: None,
+            nav_lock: None,
+            hil_lock: None,
+            worker_id: None,
+            swarm_id: None,
         }
     }
 
@@ -204,6 +254,11 @@ impl LlmAgentRuntime {
             events: None,
             file_perm_slot: None,
             stop_flag: None,
+            agent_context: None,
+            nav_lock: None,
+            hil_lock: None,
+            worker_id: None,
+            swarm_id: None,
         }
     }
 
@@ -225,6 +280,33 @@ impl LlmAgentRuntime {
         self
     }
 
+    /// Inject specialist context from the selected agent card into the system prompt.
+    pub fn with_agent_context(mut self, ctx: String) -> Self {
+        if !ctx.is_empty() {
+            self.agent_context = Some(ctx);
+        }
+        self
+    }
+
+    /// Inject a shared browser nav lock (swarm mode only).
+    pub fn with_nav_lock(mut self, lock: Arc<tokio::sync::Mutex<()>>) -> Self {
+        self.nav_lock = Some(lock);
+        self
+    }
+
+    /// Inject a shared HIL serialization lock (swarm mode only).
+    pub fn with_hil_lock(mut self, lock: Arc<tokio::sync::Mutex<()>>) -> Self {
+        self.hil_lock = Some(lock);
+        self
+    }
+
+    /// Tag this runtime as belonging to a swarm worker (enables log prefixing).
+    pub fn with_worker_id(mut self, worker_id: String, swarm_id: String) -> Self {
+        self.worker_id = Some(worker_id);
+        self.swarm_id = Some(swarm_id);
+        self
+    }
+
     fn is_stopped(&self) -> bool {
         self.stop_flag
             .as_ref()
@@ -232,8 +314,41 @@ impl LlmAgentRuntime {
             .unwrap_or(false)
     }
 
+    async fn acquire_nav_lock(&self) -> Result<Option<tokio::sync::OwnedMutexGuard<()>>, AgentError> {
+        let Some(lock) = &self.nav_lock else { return Ok(None); };
+        let timeout = Duration::from_secs(30);
+        tokio::time::timeout(timeout, lock.clone().lock_owned())
+            .await
+            .map(Some)
+            .map_err(|_| AgentError::SwarmWorkerFailed {
+                worker_id: self.worker_id.clone().unwrap_or_default(),
+                reason: "browser nav lock timed out".into(),
+            })
+    }
+
+    async fn acquire_hil_lock(&self) -> Result<Option<tokio::sync::OwnedMutexGuard<()>>, AgentError> {
+        let Some(lock) = &self.hil_lock else { return Ok(None); };
+        tokio::time::timeout(
+            Duration::from_secs(120),
+            lock.clone().lock_owned(),
+        )
+        .await
+        .map(Some)
+        .map_err(|_| AgentError::PermissionDenied { capability: "hil_lock timed out".into() })
+    }
+
     fn emit(&self, event: AgentEvent) {
         if let Some(tx) = &self.events {
+            let event = if let Some(wid) = &self.worker_id {
+                match event {
+                    AgentEvent::Log(m) => AgentEvent::Log(format!("[{}] {}", wid, m)),
+                    AgentEvent::Step(m) => AgentEvent::Step(format!("[{}] {}", wid, m)),
+                    AgentEvent::Thinking(m) => AgentEvent::Thinking(format!("[{}] {}", wid, m)),
+                    other => other,
+                }
+            } else {
+                event
+            };
             let _ = tx.send(event);
         }
     }
@@ -244,16 +359,28 @@ impl LlmAgentRuntime {
         self.emit(AgentEvent::Log(m));
     }
 
+    /// Emit an indented sub-step entry (action being executed, result received, etc.)
+    fn step(&self, message: impl Into<String>) {
+        let m = message.into();
+        info!(target: "kitsune::agent_loop", "  {}", m);
+        self.emit(AgentEvent::Step(m));
+    }
+
     /// Drive the loop. Returns the final answer string on success.
     pub async fn run(&self, user_prompt: String) -> Result<String, AgentError> {
-        // history is a sequence of (role, content) pairs. The user's request and
-        // each round of (observation -> action) feed into Ollama as turns.
+        // The user's task is embedded in the system prompt (built each turn) so it is
+        // always visible regardless of history trimming and never produces consecutive
+        // user turns — a pattern that confuses many LLMs into replying "done" immediately.
         let mut history: Vec<(String, String)> = Vec::new();
-        history.push(("user".to_string(), user_prompt.clone()));
+        let mut total_input_tokens: u32 = 0;
+        let mut total_output_tokens: u32 = 0;
 
         for iter in 0..MAX_ITERATIONS {
             // Cooperative stop — UI set the flag via the stop button.
             if self.is_stopped() {
+                if self.worker_id.is_some() {
+                    return Err(AgentError::Cancelled);
+                }
                 let msg = "■ Agent stopped by user.".to_string();
                 self.emit(AgentEvent::Done(msg.clone()));
                 return Ok(msg);
@@ -268,16 +395,14 @@ impl LlmAgentRuntime {
             };
 
             let observation_text = render_observation(&observation);
-            self.log(format!(
+            // Observation detail goes to tracing only — the UI shows human-readable step messages.
+            info!(
+                target: "kitsune::agent_loop",
                 "step {} · {} · {} elements",
                 iter + 1,
-                if observation.url.is_empty() {
-                    "(no page)".into()
-                } else {
-                    observation.url.clone()
-                },
+                if observation.url.is_empty() { "(no page)" } else { &observation.url },
                 observation.elements.len()
-            ));
+            );
 
             // Push observation as a "user" turn so the model treats it as fresh input.
             history.push(("user".to_string(), observation_text));
@@ -286,8 +411,8 @@ impl LlmAgentRuntime {
             trim_history(&mut history, 12);
 
             // 2. Ask the model.
-            let system = build_system_prompt(&self.spec);
-            let raw = match self.backend.chat(&system, history.clone()).await {
+            let system = build_system_prompt(&user_prompt, self.agent_context.as_deref());
+            let (raw, in_tok, out_tok) = match self.backend.chat(&system, history.clone()).await {
                 Ok(r) => r,
                 Err(AgentError::LlmUnavailable(msg)) => {
                     warn!(target: "kitsune::agent_loop", "LLM unavailable: {}", msg);
@@ -321,17 +446,22 @@ impl LlmAgentRuntime {
                 }
                 Err(e) => return Err(e),
             };
+            total_input_tokens += in_tok;
+            total_output_tokens += out_tok;
+            self.emit(AgentEvent::TokenUsage { input: total_input_tokens, output: total_output_tokens });
 
             // Extract <think>…</think> reasoning before parsing the action.
             let (thinking, action_text) = extract_thinking(&raw);
             if !thinking.is_empty() {
+                // Emit raw thinking text — the UI renders it as a collapsible block.
                 self.emit(AgentEvent::Thinking(thinking));
             }
-            self.log(format!("◇ {}", truncate(&action_text, 300)));
+            // Log raw JSON to tracing only — the user sees the human-readable step messages.
+            info!(target: "kitsune::agent_loop", "◇ {}", truncate(&action_text, 300));
 
-            // Empty response means the model emitted a tool-call or timed out internally.
+            // Empty response: model emitted a tool-call block, empty output, or pure thinking.
             if action_text.trim().is_empty() {
-                self.log("⚠ empty LLM response — retrying".to_string());
+                self.step("↳ Adjusting approach…".to_string());
                 history.push((
                     "user".to_string(),
                     "Respond with EXACTLY ONE JSON object — no tool calls, no prose, no fences.".to_string(),
@@ -342,8 +472,8 @@ impl LlmAgentRuntime {
             // 3. Parse.
             let action = match parse_action_json(&action_text) {
                 Ok(a) => a,
-                Err(e) => {
-                    self.log(format!("⚠ unparseable action — retrying: {}", e));
+                Err(_e) => {
+                    self.step("↳ Response format unclear, retrying…".to_string());
                     history.push(("assistant".to_string(), action_text.clone()));
                     history.push((
                         "user".to_string(),
@@ -425,9 +555,9 @@ impl LlmAgentRuntime {
     ) -> Result<StepResult, AgentError> {
         match action {
             AgentAction::Navigate { url } => {
-                // Ensure the model-supplied URL has a scheme.
+                let _nav_guard = self.acquire_nav_lock().await?;
                 let url = normalize_url(url);
-                self.log(format!("→ navigate: {}", url));
+                self.step(format!("↳ Navigating to {}", domain_of(&url)));
                 self.emit(AgentEvent::Navigated(url.clone()));
                 self.webview_tx
                     .send(WebViewCommand::Navigate(url.clone()))
@@ -437,7 +567,9 @@ impl LlmAgentRuntime {
                 Ok(StepResult::Continue(None, 3000))
             }
             AgentAction::Click { element_id } => {
-                self.log(format!("→ click [{}]", element_id));
+                let _nav_guard = self.acquire_nav_lock().await?;
+                let label = elem_label(&observation.elements, *element_id);
+                self.step(format!("↳ Clicking {}", label));
                 let script = format!(
                     "(function() {{ var el = document.querySelector('[data-kitsune-id=\"{id}\"]'); if (el) {{ el.click(); }} }})();",
                     id = element_id
@@ -449,6 +581,7 @@ impl LlmAgentRuntime {
                 Ok(StepResult::Continue(None, 1500))
             }
             AgentAction::Fill { element_id, value } => {
+                let _nav_guard = self.acquire_nav_lock().await?;
                 let element = observation.elements.iter().find(|e| e.id == *element_id);
                 let sensitive = element
                     .map(is_sensitive_field)
@@ -459,6 +592,8 @@ impl LlmAgentRuntime {
                         "⚠ sensitive field [{}] — requesting human approval",
                         element_id
                     ));
+                    // Serialize HIL dialogs across swarm workers — only one at a time.
+                    let _hil_guard = self.acquire_hil_lock().await?;
                     let trigger = HilTriggerClass::ExternalSideEffect {
                         description: format!(
                             "Agent wants to fill a sensitive field on {}",
@@ -476,14 +611,16 @@ impl LlmAgentRuntime {
                     // Approval is consumed implicitly here — its lifetime ends with this scope,
                     // which matches the single-use semantics on HilApproval.
                     drop(approval);
+                    // _hil_guard dropped here — next worker can request HIL
                     // For the hackathon path, we still inject the LLM-supplied value.
                     // Vault-backed token disclosure is the next-up item; HIL still gates it.
                 }
 
-                self.log(format!(
-                    "→ fill [{}] = \"{}\"",
-                    element_id,
-                    truncate(value, 40)
+                let label = elem_label(&observation.elements, *element_id);
+                self.step(format!(
+                    "↳ Typing \"{}\" → {}",
+                    truncate(value, 35),
+                    label
                 ));
                 let script = format!(
                     r#"(function() {{
@@ -504,7 +641,7 @@ impl LlmAgentRuntime {
                 Ok(StepResult::Continue(None, 500))
             }
             AgentAction::Read { selector } => {
-                self.log(format!("→ read \"{}\"", selector));
+                self.step(format!("↳ Reading \"{}\"", selector));
                 let (tx, mut rx) = mpsc::channel::<String>(1);
                 let script = format!(
                     r#"(function() {{
@@ -545,10 +682,11 @@ impl LlmAgentRuntime {
                     selector,
                     truncate(inner, 800)
                 );
+                self.step(format!("↳ Read {} chars from \"{}\"", inner.len(), selector));
                 Ok(StepResult::Continue(Some(summary), 0))
             }
             AgentAction::ReadFile { path } => {
-                self.log(format!("→ read_file: {}", path));
+                self.step(format!("↳ Reading file: {}", path));
 
                 // Ask the UI for permission via the shared slot.
                 let approved = match &self.file_perm_slot {
@@ -595,8 +733,53 @@ impl LlmAgentRuntime {
                     0,
                 ))
             }
+            AgentAction::Download { url, filename } => {
+                let fname = filename.as_deref()
+                    .filter(|s| !s.is_empty())
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| {
+                        url.split('/')
+                            .last()
+                            .and_then(|s| s.split('?').next())
+                            .filter(|s| !s.is_empty())
+                            .unwrap_or("download")
+                            .to_string()
+                    });
+                self.step(format!("↳ Downloading {}", fname));
+
+                let downloads = dirs::download_dir()
+                    .or_else(dirs::home_dir)
+                    .unwrap_or_else(|| std::path::PathBuf::from("."));
+                let dest = downloads.join(&fname);
+
+                let dl_client = reqwest::Client::builder()
+                    .use_rustls_tls()
+                    .timeout(Duration::from_secs(120))
+                    .build()
+                    .map_err(|e| AgentError::ExecutionError(e.to_string()))?;
+
+                let resp = dl_client.get(url.as_str()).send().await
+                    .map_err(|e| AgentError::ExecutionError(format!("Download failed: {e}")))?;
+                let status = resp.status();
+                if !status.is_success() {
+                    return Err(AgentError::ExecutionError(
+                        format!("Download returned HTTP {status}")
+                    ));
+                }
+                let bytes = resp.bytes().await
+                    .map_err(|e| AgentError::ExecutionError(format!("Download read error: {e}")))?;
+                tokio::fs::write(&dest, &bytes).await
+                    .map_err(|e| AgentError::ExecutionError(format!("Cannot save file: {e}")))?;
+
+                let path_str = dest.to_string_lossy().to_string();
+                self.step(format!("↳ Saved: {}", path_str));
+                Ok(StepResult::Continue(
+                    Some(format!("Downloaded {} ({} KB) to {}", fname, bytes.len() / 1024, path_str)),
+                    0,
+                ))
+            }
             AgentAction::Done { answer } => {
-                self.log(format!("✓ done: {}", truncate(answer, 200)));
+                // StepResult::Done → the caller emits AgentEvent::Done which the UI shows as Ok.
                 Ok(StepResult::Done(answer.clone()))
             }
         }
@@ -609,6 +792,28 @@ enum StepResult {
     Continue(Option<String>, u64),
     /// Final answer.
     Done(String),
+}
+
+/// Return just the hostname of a URL for compact display.
+fn domain_of(url: &str) -> String {
+    url.trim_start_matches("https://")
+        .trim_start_matches("http://")
+        .split('/')
+        .next()
+        .unwrap_or(url)
+        .to_string()
+}
+
+/// Best human-readable label for a page element (aria > text > placeholder > name > id).
+fn elem_label(elements: &[ObservedElement], id: usize) -> String {
+    elements.iter().find(|e| e.id == id).map(|e| {
+        let raw = if !e.aria_label.is_empty() { &e.aria_label }
+            else if !e.text.is_empty() { &e.text }
+            else if !e.placeholder.is_empty() { &e.placeholder }
+            else if !e.name.is_empty() { &e.name }
+            else { return format!("[{}]", id); };
+        format!("\"{}\"", truncate(raw, 40))
+    }).unwrap_or_else(|| format!("[{}]", id))
 }
 
 fn is_sensitive_field(el: &ObservedElement) -> bool {
@@ -680,32 +885,58 @@ fn render_observation(p: &ObservedPage) -> String {
     out
 }
 
-fn build_system_prompt(_spec: &AgentSpec) -> String {
-    r#"You are KitsuneAgent — a capable AI assistant that controls a real web browser AND can read local files. You MUST reply with raw JSON only.
+fn build_system_prompt(user_task: &str, agent_context: Option<&str>) -> String {
+    let specialist = agent_context
+        .filter(|s| !s.is_empty())
+        .map(|s| format!("\nSPECIALIST ROLE: {}\n", s))
+        .unwrap_or_default();
 
-You will receive PAGE OBSERVATION messages with the current URL, page title, and numbered interactive elements. Attached documents (if any) are provided in the conversation prefixed with "=== ATTACHED:".
+    format!(
+        r#"You are KitsuneAgent — an AI assistant that controls a real web browser.{specialist}
 
-AVAILABLE ACTIONS — output EXACTLY ONE raw JSON object per turn, nothing else:
-{"action":"navigate","url":"https://..."}
-{"action":"click","element_id":42}
-{"action":"fill","element_id":42,"value":"some text"}
-{"action":"read","selector":"h1"}
-{"action":"read_file","path":"C:\\Users\\user\\resume.txt"}
-{"action":"done","answer":"your final answer here"}
+YOUR TASK (complete this fully — do not stop early):
+{task}
 
-RULES:
-- Your entire reply must be a single JSON object. No markdown fences, no tool_call wrapper, no prose.
+Each turn you receive a PAGE OBSERVATION (URL, title, interactive elements).
+
+RESPONSE FORMAT — two parts in order:
+1. <think>your brief reasoning about what to do next</think>
+2. Exactly one JSON action object on its own line.
+
+AVAILABLE ACTIONS:
+{{"action":"navigate","url":"https://example.com"}}
+{{"action":"click","element_id":42}}
+{{"action":"fill","element_id":42,"value":"text"}}
+{{"action":"read","selector":"body"}}
+{{"action":"read_file","path":"C:\\path\\to\\file.pdf"}}
+{{"action":"download","url":"https://example.com/paper.pdf","filename":"paper.pdf"}}
+{{"action":"done","answer":"your complete final answer here"}}
+
+CORE RULES:
+- Reply with ONE raw JSON object. No markdown, no prose, no fences, no tool_call wrappers.
+- NEVER output done without having done meaningful work (navigate + read/click at minimum).
+- NEVER output done on the first turn — always start by navigating or searching.
+- Only report actions you actually took. Do NOT claim to have downloaded or saved anything unless you used the "download" action.
+- To download a file (PDF, paper, etc.) use {{"action":"download","url":"...","filename":"..."}} — this saves it to the user's Downloads folder.
+
+BROWSING RULES:
 - "navigate" loads a URL — always include https:// or http://.
-- "click" and "fill" use element_id numbers from the PAGE OBSERVATION.
-- "read" extracts page text at a CSS selector.
-- "read_file" reads a local file — the user will be shown a permission prompt.
-- "done" ends the task with a concise answer.
-- Use information from attached documents when filling forms or answering questions.
-- If an element labeled with a destination (e.g. "→ drive.google.com/...") is a link, click it.
-- After 2 failed attempts on the same URL, use "done" and explain.
-- Take exactly one action per turn.
-"#
-    .to_string()
+- "click" and "fill" use element_id numbers from PAGE OBSERVATION.
+- "read" extracts text at a CSS selector; use "body" for full page text.
+- To search: "fill" the search input, then "click" the search button. Do NOT just navigate to a search URL.
+- After landing on a search results page, CLICK through to the actual pages — do not report based on snippets alone.
+- After 3 failed attempts on one URL, try a different site.
+
+RESEARCH RULES (apply when the task involves finding/comparing information):
+- Visit at least 3 different URLs before reporting done.
+- Click through from search results to the actual content pages.
+- Use "read" with selector "body" or "article" to extract full page text.
+- For academic papers: use arxiv.org, scholar.google.com, or semanticscholar.org — not just google.com.
+- Synthesize findings from multiple sources in your final answer.
+"#,
+        specialist = specialist,
+        task = user_task,
+    )
 }
 
 /// Split model output into `(thinking, action_text)`.

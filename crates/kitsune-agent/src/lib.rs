@@ -30,6 +30,8 @@ pub use profile::{EducationEntry, LanguageEntry, ProfileIndexer, ProfileSummary}
 pub mod runtime;
 pub mod spec;
 pub mod tools;
+pub mod swarm;
+pub use swarm::{SwarmConfig, SwarmCoordinator, SwarmMode, SwarmState, SwarmTask};
 
 pub use action::{parse_action_json, AgentAction};
 pub use budget::*;
