@@ -15,6 +15,6 @@ pub mod trigger;
 
 pub use approval::{ActionId, HilApproval};
 pub use error::{HilError, HilResult};
-pub use gate::HilGate;
+pub use gate::{respond_to_checkpoint, HilCheckpoint, HilGate};
 pub use presentation::HilPresentation;
 pub use trigger::HilTriggerClass;

@@ -44,8 +44,15 @@ impl KitsuneEngine {
         // Create a channel for webview commands
         let (webview_tx, _webview_rx) = mpsc::channel::<WebViewCommand>(100);
 
-        // Create placeholder instances for Vault and HIL
-        let vault = Arc::new(VaultBackend::new("password", &[0; 32]).unwrap());
+        // Create vault with keyring-backed KDF salt; fall back to a dev-only
+        // fixed salt if the OS keyring is unavailable (e.g. headless CI).
+        let vault = Arc::new(
+            VaultBackend::new_with_keyring("kitsune-dev")
+                .unwrap_or_else(|_| {
+                    tracing::warn!("keyring unavailable — using dev vault (never in production)");
+                    VaultBackend::new("kitsune-dev", &[1u8; 32]).unwrap()
+                }),
+        );
         let (hil_gate, _hil_rx) = HilGate::new(100);
         let hil_gate = Arc::new(hil_gate);
 

@@ -1,6 +1,7 @@
 use crate::app::{AgentRunState, KitsuneBrowser, LogLevel};
 use crate::theme::KitsuneTheme;
 use eframe::egui;
+use kitsune_hil::gate::respond_to_checkpoint;
 
 pub fn hil_dialog(ctx: &egui::Context, browser: &mut KitsuneBrowser) {
     let Some(action) = &browser.hil_action else {
@@ -12,19 +13,21 @@ pub fn hil_dialog(ctx: &egui::Context, browser: &mut KitsuneBrowser) {
     let fraction = (remaining / action.total_secs as f64) as f32;
     let secs_left = remaining as u32;
 
-    // Clone data we need before the mutable borrow
+    // Clone display data before borrowing mutably below.
     let title = action.title.clone();
     let subtitle = action.subtitle.clone();
-    // Filter out rows with empty values
     let rows: Vec<(String, String)> = action.rows.iter()
         .filter(|(_, v)| !v.is_empty())
         .cloned()
         .collect();
     let timed_out = remaining <= 0.0;
 
-    // Auto-cancel on timeout
+    // Auto-cancel on timeout — resolve the real gate checkpoint too.
     if timed_out {
         browser.push_log("⚠  HIL timeout — action auto-cancelled", LogLevel::Warn);
+        if let Some(cp) = browser.hil_pending_checkpoint.take() {
+            respond_to_checkpoint(cp, false, Some("Timeout".to_string()));
+        }
         browser.hil_action = None;
         browser.agent_state = AgentRunState::Idle;
         return;
@@ -69,7 +72,6 @@ pub fn hil_dialog(ctx: &egui::Context, browser: &mut KitsuneBrowser) {
                 .fill(egui::Color32::from_rgba_premultiplied(255, 122, 0, 12))
                 .inner_margin(egui::Margin::symmetric(20.0, 14.0))
                 .show(ui, |ui| {
-                    // Badge
                     egui::Frame::none()
                         .fill(KitsuneTheme::AMBER_DIM)
                         .rounding(egui::Rounding::same(20.0))
@@ -133,14 +135,14 @@ pub fn hil_dialog(ctx: &egui::Context, browser: &mut KitsuneBrowser) {
                                 ui.with_layout(
                                     egui::Layout::right_to_left(egui::Align::Center),
                                     |ui| {
-                                        let col = if k == "Total" {
+                                        let col = if k == "Total" || k == "Cost" {
                                             KitsuneTheme::AMBER
-                                        } else if k == "Credentials" {
+                                        } else if k == "Credential" {
                                             KitsuneTheme::GREEN_SAFE
                                         } else {
                                             KitsuneTheme::TEXT_PRIMARY
                                         };
-                                        let sz = if k == "Total" { 14.0 } else { 11.0 };
+                                        let sz = if k == "Total" || k == "Cost" { 14.0 } else { 11.0 };
                                         ui.label(
                                             egui::RichText::new(v)
                                                 .size(sz)
@@ -150,7 +152,6 @@ pub fn hil_dialog(ctx: &egui::Context, browser: &mut KitsuneBrowser) {
                                     },
                                 );
                             });
-                            // Light separator between rows (not after last)
                             if i < rows.len() - 1 {
                                 let rect = ui.available_rect_before_wrap();
                                 let line = egui::Rect::from_min_size(
@@ -169,7 +170,6 @@ pub fn hil_dialog(ctx: &egui::Context, browser: &mut KitsuneBrowser) {
                 .inner_margin(egui::Margin { left: 20.0, right: 20.0, top: 0.0, bottom: 8.0 })
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
-                        // Timer label
                         let timer_col = if fraction > 0.4 {
                             KitsuneTheme::TEXT2
                         } else {
@@ -183,25 +183,15 @@ pub fn hil_dialog(ctx: &egui::Context, browser: &mut KitsuneBrowser) {
                         );
                     });
                     ui.add_space(3.0);
-                    // Progress bar
                     let (bar_rect, _) = ui.allocate_exact_size(
                         egui::vec2(ui.available_width(), 3.0),
                         egui::Sense::hover(),
                     );
-                    ui.painter().rect_filled(
-                        bar_rect,
-                        egui::Rounding::same(2.0),
-                        KitsuneTheme::BG4,
-                    );
+                    ui.painter().rect_filled(bar_rect, egui::Rounding::same(2.0), KitsuneTheme::BG4);
                     let mut fill = bar_rect;
                     fill.set_right(bar_rect.left() + bar_rect.width() * fraction);
-                    let bar_col = if fraction > 0.4 {
-                        KitsuneTheme::AMBER
-                    } else {
-                        KitsuneTheme::RED
-                    };
-                    ui.painter()
-                        .rect_filled(fill, egui::Rounding::same(2.0), bar_col);
+                    let bar_col = if fraction > 0.4 { KitsuneTheme::AMBER } else { KitsuneTheme::RED };
+                    ui.painter().rect_filled(fill, egui::Rounding::same(2.0), bar_col);
                 });
 
             // Separator
@@ -246,32 +236,40 @@ pub fn hil_dialog(ctx: &egui::Context, browser: &mut KitsuneBrowser) {
 
     // ── Handle button results ─────────────────────────────────────────────
     if confirm {
+        // Resolve the real HIL gate checkpoint (in-process agent path).
+        if let Some(cp) = browser.hil_pending_checkpoint.take() {
+            respond_to_checkpoint(cp, true, None);
+        } else {
+            // SSE demo path: POST approval to cloud-mock server.
+            browser.runtime().spawn(async move {
+                let client = reqwest::Client::new();
+                let _ = client
+                    .post("http://127.0.0.1:7700/api/hil-response")
+                    .json(&serde_json::json!({"approved": true}))
+                    .send()
+                    .await;
+            });
+        }
         browser.push_log("✓  User approved — executing…", LogLevel::Ok);
         browser.hil_action = None;
-
-        // POST approval to the backend
-        browser.runtime().spawn(async move {
-            let client = reqwest::Client::new();
-            let _ = client
-                .post("http://127.0.0.1:7700/api/hil-response")
-                .json(&serde_json::json!({"approved": true}))
-                .send()
-                .await;
-        });
     } else if cancel {
+        // Resolve the real HIL gate checkpoint (in-process agent path).
+        if let Some(cp) = browser.hil_pending_checkpoint.take() {
+            respond_to_checkpoint(cp, false, Some("Cancelled by user".to_string()));
+        } else {
+            // SSE demo path: POST rejection to cloud-mock server.
+            browser.runtime().spawn(async move {
+                let client = reqwest::Client::new();
+                let _ = client
+                    .post("http://127.0.0.1:7700/api/hil-response")
+                    .json(&serde_json::json!({"approved": false}))
+                    .send()
+                    .await;
+            });
+        }
         browser.push_log("✕  User cancelled — action aborted", LogLevel::Warn);
         browser.hil_action = None;
         browser.agent_state = AgentRunState::Idle;
-
-        // POST rejection to the backend
-        browser.runtime().spawn(async move {
-            let client = reqwest::Client::new();
-            let _ = client
-                .post("http://127.0.0.1:7700/api/hil-response")
-                .json(&serde_json::json!({"approved": false}))
-                .send()
-                .await;
-        });
     }
 
     ctx.request_repaint(); // keep timer ticking

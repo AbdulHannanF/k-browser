@@ -102,21 +102,66 @@ impl IpcServer {
                                 }
                             };
 
-                            // Validate privilege level!
-                            // Note: `msg.privilege_level` doesn't exist on `IpcMessage` currently, but roadmap says "check msg.privilege_level against the sender's ProcessRole".
-                            // I will do a basic PrivilegeLevel mapping check. Let's assume Renderer is Sandboxed.
-                            // If it fails: IpcError::PermissionDenied
-
+                            // Capability-based privilege check: each role may only
+                            // send the payload types appropriate to its trust level.
+                            // Fail closed — unknown roles are denied.
                             let allowed = match parsed_role {
-                                ProcessRole::Agent => true, // SemiPrivileged
-                                ProcessRole::Network | ProcessRole::Renderer | ProcessRole::Js => {
-                                    // Sandboxed, allow basic
-                                    true
-                                }
-                                _ => false,
+                                // Broker has full authority; it never connects as a client.
+                                ProcessRole::Broker => false,
+
+                                // Semi-privileged: agent can initiate vault/HIL/DOM/navigation.
+                                ProcessRole::Agent => matches!(
+                                    msg.payload,
+                                    crate::message::IpcPayload::VaultRequest { .. }
+                                        | crate::message::IpcPayload::HilCheckpointRequest { .. }
+                                        | crate::message::IpcPayload::DomQuery { .. }
+                                        | crate::message::IpcPayload::DomFillField { .. }
+                                        | crate::message::IpcPayload::DomClick { .. }
+                                        | crate::message::IpcPayload::SetDomHighlight(_)
+                                        | crate::message::IpcPayload::ClearDomHighlight(_)
+                                        | crate::message::IpcPayload::ClearAllDomHighlights
+                                        | crate::message::IpcPayload::NavigateRequest { .. }
+                                        | crate::message::IpcPayload::AgentActionRequest { .. }
+                                        | crate::message::IpcPayload::ProcessRegister { .. }
+                                        | crate::message::IpcPayload::ProcessShutdown { .. }
+                                ),
+
+                                // Sandboxed renderer: can only report DOM results and lifecycle.
+                                ProcessRole::Renderer => matches!(
+                                    msg.payload,
+                                    crate::message::IpcPayload::DomQueryResult { .. }
+                                        | crate::message::IpcPayload::DomOperationResult { .. }
+                                        | crate::message::IpcPayload::ProcessRegister { .. }
+                                        | crate::message::IpcPayload::ProcessShutdown { .. }
+                                        | crate::message::IpcPayload::Error { .. }
+                                ),
+
+                                // Sandboxed network process: can only report fetch results and navigation.
+                                ProcessRole::Network => matches!(
+                                    msg.payload,
+                                    crate::message::IpcPayload::NetworkFetchResponse { .. }
+                                        | crate::message::IpcPayload::NavigateResponse { .. }
+                                        | crate::message::IpcPayload::ProcessRegister { .. }
+                                        | crate::message::IpcPayload::ProcessShutdown { .. }
+                                        | crate::message::IpcPayload::Error { .. }
+                                ),
+
+                                // Sandboxed JS engine: lifecycle messages only.
+                                ProcessRole::Js => matches!(
+                                    msg.payload,
+                                    crate::message::IpcPayload::ProcessRegister { .. }
+                                        | crate::message::IpcPayload::ProcessShutdown { .. }
+                                        | crate::message::IpcPayload::Error { .. }
+                                ),
                             };
 
                             if !allowed {
+                                warn!(
+                                    role = ?parsed_role,
+                                    payload = ?std::mem::discriminant(&msg.payload),
+                                    correlation_id = %msg.correlation_id.0,
+                                    "IPC privilege denial — role sent disallowed payload type"
+                                );
                                 let _ = tx
                                     .send((
                                         parsed_role,
@@ -124,8 +169,11 @@ impl IpcServer {
                                             crate::message::ProcessId("Broker".to_string()),
                                             crate::message::ProcessId("Broker".to_string()),
                                             crate::message::IpcPayload::Error {
-                                                code: "DENID".to_string(),
-                                                message: "Permission Denied".to_string(),
+                                                code: "PERMISSION_DENIED".to_string(),
+                                                message: format!(
+                                                    "{:?} is not permitted to send this payload type",
+                                                    parsed_role
+                                                ),
                                             },
                                         ),
                                     ))

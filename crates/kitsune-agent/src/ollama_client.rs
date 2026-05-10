@@ -100,7 +100,7 @@ impl OllamaClient {
             .await
             .map_err(|e| {
                 if e.is_connect() || e.is_timeout() {
-                    AgentError::ExecutionError(format!(
+                    AgentError::LlmUnavailable(format!(
                         "Ollama not responding at {}: {}",
                         self.base_url, e
                     ))

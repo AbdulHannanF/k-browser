@@ -1,3 +1,4 @@
+use kitsune_hil::HilError;
 use kitsune_vault::error::VaultError;
 use thiserror::Error;
 pub type AgentResult<T> = Result<T, AgentError>;
@@ -22,8 +23,14 @@ pub enum AgentError {
     #[error("Agent execution error: {0}")]
     ExecutionError(String),
 
+    #[error("LLM unavailable: {0}")]
+    LlmUnavailable(String),
+
     #[error("HIL approval required for this action")]
     HilRequired,
+
+    #[error("HIL checkpoint rejected by user: {0}")]
+    HilRejected(String),
 
     #[error("Vault access denied: {0}")]
     VaultAccessDenied(String),
@@ -44,5 +51,15 @@ pub enum AgentError {
 impl From<VaultError> for AgentError {
     fn from(error: VaultError) -> Self {
         AgentError::VaultAccessDenied(error.to_string())
+    }
+}
+
+impl From<HilError> for AgentError {
+    fn from(error: HilError) -> Self {
+        match error {
+            HilError::UserRejected { reason } => AgentError::HilRejected(reason),
+            HilError::Dismissed => AgentError::HilRejected("Dismissed".to_string()),
+            e => AgentError::Internal(e.to_string()),
+        }
     }
 }

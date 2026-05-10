@@ -52,6 +52,14 @@ pub enum VaultError {
     #[error("The vault is locked. Please enter your passphrase to unlock it.")]
     VaultLocked,
 
+    /// A credential token has expired or was already consumed.
+    #[error("Token has expired or was already consumed")]
+    TokenExpired,
+
+    /// The token ID is not in the in-memory store.
+    #[error("Token not found — it was never issued or has already been used")]
+    TokenNotFound,
+
     /// Internal vault error.
     #[error("Internal vault error: {0}")]
     Internal(String),

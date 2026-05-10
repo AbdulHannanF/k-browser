@@ -174,7 +174,37 @@ impl LlmAgentRuntime {
 
             // 2. Ask the model.
             let system = build_system_prompt(&self.spec);
-            let raw = self.ollama.chat(&system, history.clone()).await?;
+            let raw = match self.ollama.chat(&system, history.clone()).await {
+                Ok(r) => r,
+                Err(AgentError::LlmUnavailable(msg)) => {
+                    warn!(target: "kitsune::agent_loop", "LLM unavailable: {}", msg);
+                    // Only attempt the local fallback on the first iteration so we
+                    // don't silently swallow mid-task failures.
+                    if iter == 0 {
+                        if let Some(url) = fallback_navigate(&user_prompt) {
+                            self.log(format!(
+                                "⚠ LLM offline — local fallback: navigate to {}",
+                                url
+                            ));
+                            self.emit(AgentEvent::Navigated(url.clone()));
+                            self.webview_tx
+                                .send(WebViewCommand::Navigate(url.clone()))
+                                .await
+                                .map_err(|_| AgentError::IpcDisconnected)?;
+                            let done_msg = format!("Navigated to {} (no LLM — used local planner)", url);
+                            self.emit(AgentEvent::Done(done_msg.clone()));
+                            return Ok(done_msg);
+                        }
+                    }
+                    let err_msg = format!(
+                        "LLM unavailable and task requires reasoning. Start Ollama (`ollama serve`) or configure an API key. Detail: {}",
+                        msg
+                    );
+                    self.emit(AgentEvent::Error(err_msg.clone()));
+                    return Err(AgentError::LlmUnavailable(err_msg));
+                }
+                Err(e) => return Err(e),
+            };
 
             // Extract <think>…</think> reasoning before parsing the action.
             let (thinking, action_text) = extract_thinking(&raw);
@@ -603,6 +633,75 @@ fn truncate(s: &str, n: usize) -> String {
         out.push('…');
         out
     }
+}
+
+/// Deterministic URL dispatch when no LLM is available.
+/// Mirrors the pattern-matching in kitsune-cloud-mock's local_plan().
+/// Returns Some(url) for simple navigation intents, None for tasks that need reasoning.
+fn fallback_navigate(command: &str) -> Option<String> {
+    let lower = command.trim().to_lowercase();
+
+    // Direct URL
+    for tok in command.split_whitespace() {
+        if tok.starts_with("http://") || tok.starts_with("https://") {
+            return Some(tok.trim_end_matches(|c: char| matches!(c, '.' | ',' | ';')).to_string());
+        }
+    }
+
+    // Wikipedia
+    for prefix in &["search wikipedia for ", "wikipedia search ", "wikipedia for ", "wikipedia ", "wiki "] {
+        if let Some(topic) = lower.strip_prefix(prefix) {
+            let slug: String = topic.trim().split_whitespace()
+                .map(|w| { let mut c = w.chars(); c.next().map(|f| f.to_uppercase().collect::<String>() + c.as_str()).unwrap_or_default() })
+                .collect::<Vec<_>>().join("_");
+            return Some(format!("https://en.wikipedia.org/wiki/{}", urlencoding::encode(&slug)));
+        }
+    }
+    // YouTube
+    for prefix in &["youtube ", "search youtube for ", "play "] {
+        if let Some(q) = lower.strip_prefix(prefix) {
+            return Some(format!("https://www.youtube.com/results?search_query={}", urlencoding::encode(q.trim())));
+        }
+    }
+    // GitHub
+    for prefix in &["github ", "search github for "] {
+        if let Some(q) = lower.strip_prefix(prefix) {
+            return Some(format!("https://github.com/search?q={}&type=repositories", urlencoding::encode(q.trim())));
+        }
+    }
+    // News
+    for prefix in &["news about ", "news on ", "news for ", "news "] {
+        if let Some(q) = lower.strip_prefix(prefix) {
+            return Some(format!("https://news.google.com/search?q={}", urlencoding::encode(q.trim())));
+        }
+    }
+    // Shopping
+    for prefix in &["buy ", "shop for ", "shop ", "amazon "] {
+        if let Some(q) = lower.strip_prefix(prefix) {
+            return Some(format!("https://www.amazon.com/s?k={}", urlencoding::encode(q.trim())));
+        }
+    }
+    // go to / open / navigate / visit
+    for prefix in &["go to ", "open ", "navigate to ", "visit "] {
+        if let Some(site) = lower.strip_prefix(prefix) {
+            let site = site.trim().trim_matches(|c: char| c == '"' || c == '\'');
+            return Some(if site.starts_with("http://") || site.starts_with("https://") {
+                site.to_string()
+            } else if site.contains('.') {
+                format!("https://{}", site)
+            } else {
+                format!("https://www.{}.com", site.replace(' ', ""))
+            });
+        }
+    }
+    // Generic search
+    for prefix in &["search for ", "search ", "find ", "google ", "look up ", "lookup "] {
+        if let Some(q) = lower.strip_prefix(prefix) {
+            return Some(format!("https://www.google.com/search?q={}", urlencoding::encode(q.trim())));
+        }
+    }
+
+    None
 }
 
 /// Ensure model-returned URLs have a scheme so WebView2 doesn't reject them.
