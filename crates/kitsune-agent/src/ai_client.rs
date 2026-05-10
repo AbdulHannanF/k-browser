@@ -42,6 +42,10 @@ impl Default for ModelSlots {
     }
 }
 
+/// `url` is a versioned base URL that includes the API version segment.
+/// Examples: `https://api.openai.com/v1`, `http://localhost:7700/v1`.
+/// Callers append endpoint paths (e.g. `/chat/completions`) directly — do NOT
+/// add `/v1` again; that would produce a double-version path.
 #[derive(Clone, Serialize, Deserialize)]
 pub enum AiProviderConfig {
     Ollama { url: String, slots: ModelSlots },
@@ -181,9 +185,11 @@ impl AgentAiClient {
                     messages: vec![OpenAiMessage { role: "user", content: prompt }],
                     max_tokens: 4096,
                 };
+                // `base` already includes the version segment (e.g. ".../v1");
+                // append only the endpoint path to avoid a double-version URL.
                 let resp = self
                     .http
-                    .post(format!("{}/v1/chat/completions", base))
+                    .post(format!("{}/chat/completions", base))
                     .bearer_auth(api_key)
                     .json(&body)
                     .send()
