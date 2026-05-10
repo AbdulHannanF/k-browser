@@ -1,6 +1,8 @@
 use crate::theme::KitsuneTheme;
 use eframe::egui;
+use kitsune_agent::swarm::types::{SwarmState, TaskStatus};
 
+// Retained for future orchestrator task graph use.
 #[derive(Debug, Clone, PartialEq)]
 pub enum NodeStatus {
     Pending,
@@ -30,54 +32,106 @@ impl TaskNode {
     }
 }
 
-pub fn task_graph_panel(ui: &mut egui::Ui, nodes: &[TaskNode]) {
+pub fn task_graph_panel(ui: &mut egui::Ui, swarm_state: &Option<SwarmState>) {
     ui.heading(egui::RichText::new("Task Graph").color(KitsuneTheme::TEXT_PRIMARY));
     ui.separator();
 
-    if nodes.is_empty() {
-        ui.label(egui::RichText::new("No active task.").color(KitsuneTheme::TEXT2));
+    let Some(state) = swarm_state else {
+        ui.label(egui::RichText::new("No active swarm.").color(KitsuneTheme::TEXT2));
+        return;
+    };
+
+    // Summary bar
+    ui.horizontal(|ui| {
+        ui.label(egui::RichText::new(format!("Goal: {}", state.goal)).color(KitsuneTheme::TEXT_PRIMARY));
+    });
+    ui.horizontal(|ui| {
+        ui.label(
+            egui::RichText::new(format!(
+                "Workers: {} active · {} done · {} pending · {} tool calls",
+                state.active_count(),
+                state.completed_count(),
+                state.pending_count(),
+                state.total_tool_calls,
+            ))
+            .color(KitsuneTheme::TEXT2)
+            .size(11.0),
+        );
+    });
+    ui.separator();
+
+    if state.tasks.is_empty() {
+        ui.label(egui::RichText::new("Planning…").color(KitsuneTheme::TEXT2));
+        ui.spinner();
         return;
     }
 
-    for node in nodes {
-        let (icon, color) = match &node.status {
-            NodeStatus::Pending => ("○", KitsuneTheme::TEXT3),
-            NodeStatus::Running => ("●", KitsuneTheme::AMBER),
-            NodeStatus::Completed => ("✓", KitsuneTheme::GREEN),
-            NodeStatus::Failed(_) => ("✗", KitsuneTheme::RED),
+    for task in &state.tasks {
+        let (icon, color) = match &task.status {
+            TaskStatus::Pending => ("○", KitsuneTheme::TEXT3),
+            TaskStatus::Running => ("●", KitsuneTheme::AMBER),
+            TaskStatus::Completed(_) => ("✓", KitsuneTheme::GREEN),
+            TaskStatus::Failed(_) => ("✗", KitsuneTheme::RED),
+            TaskStatus::Cancelled => ("⬛", KitsuneTheme::TEXT3),
         };
 
         ui.horizontal(|ui| {
             ui.colored_label(color, icon);
-            ui.label(egui::RichText::new(&node.name).color(KitsuneTheme::TEXT_PRIMARY).strong());
             ui.label(
-                egui::RichText::new(format!("[{}]", node.model_slot))
+                egui::RichText::new(task.role.as_str())
+                    .color(KitsuneTheme::TEXT_PRIMARY)
+                    .strong(),
+            );
+            ui.label(
+                egui::RichText::new(format!("[{}]", task.id))
                     .color(KitsuneTheme::TEXT2)
                     .size(11.0),
             );
-            if let Some(t) = node.tokens_used {
+            if task.tool_calls_used > 0 {
                 ui.label(
-                    egui::RichText::new(format!("{t}t"))
+                    egui::RichText::new(format!("{}t", task.tool_calls_used))
                         .color(KitsuneTheme::TEXT3)
                         .size(11.0),
                 );
             }
-            if let NodeStatus::Running = &node.status {
+            if matches!(task.status, TaskStatus::Running) {
                 ui.spinner();
-            }
-            if let NodeStatus::Failed(e) = &node.status {
-                ui.colored_label(KitsuneTheme::RED, e);
             }
         });
 
-        if let Some(summary) = &node.summary {
-            ui.indent("task_summary", |ui| {
+        if let Some(msg) = &task.last_message {
+            ui.indent(format!("task_msg_{}", task.id), |ui| {
                 ui.label(
-                    egui::RichText::new(summary)
-                        .color(KitsuneTheme::TEXT2)
-                        .size(11.0),
+                    egui::RichText::new(if msg.len() > 120 {
+                        format!("{}…", &msg[..120])
+                    } else {
+                        msg.clone()
+                    })
+                    .color(KitsuneTheme::TEXT2)
+                    .size(11.0),
                 );
             });
+        }
+
+        if let TaskStatus::Failed(e) = &task.status {
+            ui.indent(format!("task_err_{}", task.id), |ui| {
+                ui.colored_label(KitsuneTheme::RED, e);
+            });
+        }
+    }
+
+    // Final answer section
+    if let Some(answer) = &state.final_answer {
+        ui.separator();
+        ui.label(egui::RichText::new("Final Answer").color(KitsuneTheme::TEXT_PRIMARY).strong());
+        egui::ScrollArea::vertical()
+            .id_salt("swarm_answer_scroll")
+            .max_height(120.0)
+            .show(ui, |ui| {
+                ui.label(egui::RichText::new(answer).color(KitsuneTheme::TEXT2).size(11.0));
+            });
+        if ui.small_button("Copy").clicked() {
+            ui.output_mut(|o| o.copied_text = answer.clone());
         }
     }
 }

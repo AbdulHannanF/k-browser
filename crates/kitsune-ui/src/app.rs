@@ -12,7 +12,7 @@ use crate::dialogs::hil_dialog::hil_dialog;
 use crate::dialogs::settings_dialog::settings_dialog;
 use crate::panels::agent_panel::agent_panel;
 use crate::panels::session_panel::session_panel;
-use crate::panels::task_graph_panel::TaskNode;
+use kitsune_agent::swarm::types::{SwarmConfig, SwarmMode, SwarmState, TaskStatus as SwarmTaskStatus};
 use crate::theme::KitsuneTheme;
 use kitsune_agent::ai_client::{AgentAiClient, AiProviderConfig};
 use kitsune_agent::captcha::CaptchaAgent;
@@ -69,7 +69,9 @@ pub enum LogLevel {
     Warn,
     Block,
     Cmd,
-    /// Model chain-of-thought / reasoning (muted display).
+    /// Indented sub-step emitted by execute_action (navigate, click, fill, read).
+    Step,
+    /// Model chain-of-thought / reasoning — rendered as a collapsible block.
     Think,
 }
 
@@ -82,11 +84,12 @@ pub struct LogEntry {
 impl LogEntry {
     pub fn color(&self) -> egui::Color32 {
         match self.level {
-            LogLevel::Info => KitsuneTheme::TEXT1,
+            LogLevel::Info => KitsuneTheme::TEXT2,
             LogLevel::Ok => KitsuneTheme::GREEN,
             LogLevel::Warn => KitsuneTheme::AMBER,
             LogLevel::Block => KitsuneTheme::RED,
             LogLevel::Cmd => KitsuneTheme::BLUE,
+            LogLevel::Step => KitsuneTheme::TEXT1,
             LogLevel::Think => KitsuneTheme::TEXT3,
         }
     }
@@ -116,6 +119,12 @@ impl Default for PrivacyState {
             tls_version: "TLS 1.3",
         }
     }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct TokenUsageState {
+    pub input_tokens: u32,
+    pub output_tokens: u32,
 }
 
 #[derive(Debug, Clone)]
@@ -158,6 +167,7 @@ pub struct KitsuneBrowser {
     pub agent_log: Vec<LogEntry>,
     pub hil_action: Option<HilAction>,
     pub budget: BudgetState,
+    pub token_usage: TokenUsageState,
     pub privacy: PrivacyState,
 
     // Internal
@@ -219,11 +229,21 @@ pub struct KitsuneBrowser {
     /// Cooperative stop flag — set to true when the user clicks Stop.
     pub agent_stop_flag: StopFlag,
 
+    /// Which agent card is currently selected (drives specialist context injected into the loop).
+    pub selected_agent_card: Option<String>,
+
+    // ── Swarm ────────────────────────────────────────────────────────────────
+    /// Whether the next run uses the swarm multi-agent coordinator.
+    pub swarm_mode: bool,
+    /// Configuration for the next swarm run.
+    pub swarm_config: SwarmConfig,
+    /// Live state of the currently active swarm (None when idle).
+    pub swarm_state: Option<SwarmState>,
+
     // ── Orchestrator pipeline ────────────────────────────────────────────────
     pub profile_indexer: Option<Arc<ProfileIndexer>>,
     pub profile_summary: Option<ProfileSummary>,
     pub orchestrator: Option<Arc<AgentOrchestrator>>,
-    pub task_nodes: Vec<TaskNode>,
     pub ai_client: Option<Arc<AgentAiClient>>,
 }
 
@@ -319,6 +339,29 @@ pub enum AgentSseAction {
     HilCancelled,
     UrlUpdate { url: String },
     Done { message: String },
+    TokenUsage { input: u32, output: u32 },
+    SwarmPlanReady {
+        swarm_id: String,
+        goal: String,
+        tasks: Vec<kitsune_agent::swarm::types::SwarmTask>,
+    },
+    SwarmUpdate {
+        swarm_id: String,
+        worker_id: String,
+        role: String,
+        status: String,
+        message: String,
+        tool_calls_used: u32,
+    },
+    SwarmDone {
+        swarm_id: String,
+        final_answer: String,
+        total_tool_calls: u32,
+    },
+    SwarmError {
+        swarm_id: String,
+        error: String,
+    },
 }
 
 impl KitsuneBrowser {
@@ -423,6 +466,7 @@ impl KitsuneBrowser {
             agent_log: Vec::new(),
             hil_action: None,
             budget: BudgetState::default(),
+            token_usage: TokenUsageState::default(),
             privacy: PrivacyState::default(),
             startup_error: None,
             _runtime: runtime,
@@ -461,10 +505,13 @@ impl KitsuneBrowser {
             file_perm_slot: std::sync::Arc::new(std::sync::Mutex::new(None)),
             file_perm_pending: None,
             agent_stop_flag: Arc::new(AtomicBool::new(false)),
+            selected_agent_card: None,
+            swarm_mode: false,
+            swarm_config: SwarmConfig::default(),
+            swarm_state: None,
             profile_indexer,
             profile_summary,
             orchestrator,
-            task_nodes: Vec::new(),
             ai_client,
         }
     }
@@ -664,6 +711,7 @@ impl KitsuneBrowser {
                         "warn" => LogLevel::Warn,
                         "block" => LogLevel::Block,
                         "cmd" => LogLevel::Cmd,
+                        "step" => LogLevel::Step,
                         "think" => LogLevel::Think,
                         _ => LogLevel::Info,
                     };
@@ -710,10 +758,59 @@ impl KitsuneBrowser {
                 AgentSseAction::UrlUpdate { url } => {
                     self.navigate(&url);
                 }
+                AgentSseAction::TokenUsage { input, output } => {
+                    self.token_usage.input_tokens = input;
+                    self.token_usage.output_tokens = output;
+                }
                 AgentSseAction::Done { message } => {
                     if !message.is_empty() {
                         self.push_log(message, LogLevel::Ok);
                     }
+                    self.agent_state = AgentRunState::Idle;
+                }
+                AgentSseAction::SwarmPlanReady { swarm_id, goal, tasks } => {
+                    self.swarm_state = Some(SwarmState {
+                        swarm_id,
+                        goal,
+                        config: self.swarm_config.clone(),
+                        tasks,
+                        final_answer: None,
+                        total_tool_calls: 0,
+                        started_at: std::time::Instant::now(),
+                    });
+                }
+                AgentSseAction::SwarmUpdate { swarm_id: _, worker_id, role, status, message, tool_calls_used } => {
+                    if let Some(state) = &mut self.swarm_state {
+                        if let Some(task) = state.tasks.iter_mut().find(|t| {
+                            t.worker_id.as_deref() == Some(worker_id.as_str())
+                                || t.role.as_str() == role.as_str()
+                        }) {
+                            task.tool_calls_used = tool_calls_used;
+                            task.last_message = Some(message.clone());
+                            task.status = match status.as_str() {
+                                "Running" => SwarmTaskStatus::Running,
+                                "Completed" => SwarmTaskStatus::Completed(message.clone()),
+                                "Failed" => SwarmTaskStatus::Failed(message.clone()),
+                                "Cancelled" => SwarmTaskStatus::Cancelled,
+                                _ => task.status.clone(),
+                            };
+                        }
+                        state.total_tool_calls = state.tasks.iter().map(|t| t.tool_calls_used).sum();
+                    }
+                    self.push_log(format!("[{}] {}", role, message), LogLevel::Step);
+                }
+                AgentSseAction::SwarmDone { final_answer, total_tool_calls, .. } => {
+                    if let Some(state) = &mut self.swarm_state {
+                        state.final_answer = Some(final_answer.clone());
+                        state.total_tool_calls = total_tool_calls;
+                    }
+                    if !final_answer.is_empty() {
+                        self.push_log(final_answer, LogLevel::Ok);
+                    }
+                    self.agent_state = AgentRunState::Idle;
+                }
+                AgentSseAction::SwarmError { error, .. } => {
+                    self.push_log(format!("Swarm failed: {}", error), LogLevel::Block);
                     self.agent_state = AgentRunState::Idle;
                 }
             }

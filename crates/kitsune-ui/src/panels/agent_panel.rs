@@ -1,5 +1,5 @@
-use crate::app::{AgentRunState, AgentSseAction, AttachedFile, KitsuneBrowser, LogLevel, SettingsProvider};
-use kitsune_agent::ai_client::{AiProviderConfig, ModelSlots};
+use crate::app::{AgentRunState, AgentSseAction, AttachedFile, KitsuneBrowser, LogEntry, LogLevel, SettingsProvider, TokenUsageState};
+use kitsune_agent::ai_client::{AgentAiClient, AiProviderConfig, ModelSlots};
 use crate::panels::agent_card::{AgentCard, AgentStatus};
 use crate::theme::KitsuneTheme;
 use eframe::egui;
@@ -7,9 +7,11 @@ use kitsune_agent::spec::{
     AgentAuthor, AgentBudget, AgentConstraints, AgentGoal, AgentId, AgentSpec, AgentTool,
     DomainPolicy,
 };
+use kitsune_agent::swarm::types::{SwarmConfig, SwarmMode};
 use kitsune_agent::{AgentEvent, FilePermSlot, LlmAgentRuntime, StopFlag};
 use std::sync::atomic::Ordering;
 use std::sync::mpsc::Sender;
+use std::sync::Arc;
 
 pub fn agent_panel(ctx: &egui::Context, browser: &mut KitsuneBrowser) {
     let is_running = browser.agent_state == AgentRunState::Running;
@@ -199,6 +201,57 @@ pub fn agent_panel(ctx: &egui::Context, browser: &mut KitsuneBrowser) {
 
                     ui.add_space(4.0);
 
+                    // ── Swarm config bar (visible only when swarm mode active) ──
+                    if browser.swarm_mode {
+                        ui.horizontal(|ui| {
+                            ui.label(egui::RichText::new("Workers:").size(9.5).color(KitsuneTheme::TEXT3));
+                            egui::ComboBox::from_id_salt("swarm_max_workers")
+                                .selected_text(browser.swarm_config.max_workers.to_string())
+                                .width(48.0)
+                                .show_ui(ui, |ui| {
+                                    for n in [3usize, 5, 10, 20, 50] {
+                                        ui.selectable_value(
+                                            &mut browser.swarm_config.max_workers,
+                                            n,
+                                            n.to_string(),
+                                        );
+                                    }
+                                });
+                            ui.separator();
+                            ui.label(egui::RichText::new("Mode:").size(9.5).color(KitsuneTheme::TEXT3));
+                            egui::ComboBox::from_id_salt("swarm_mode_select")
+                                .selected_text(match browser.swarm_config.mode {
+                                    SwarmMode::DiscoveryAtScale => "Discovery",
+                                    SwarmMode::OutputAtScale => "Output",
+                                    SwarmMode::PerspectiveAtScale => "Perspective",
+                                })
+                                .width(82.0)
+                                .show_ui(ui, |ui| {
+                                    ui.selectable_value(
+                                        &mut browser.swarm_config.mode,
+                                        SwarmMode::DiscoveryAtScale,
+                                        "Discovery",
+                                    );
+                                    ui.selectable_value(
+                                        &mut browser.swarm_config.mode,
+                                        SwarmMode::OutputAtScale,
+                                        "Output",
+                                    );
+                                    ui.selectable_value(
+                                        &mut browser.swarm_config.mode,
+                                        SwarmMode::PerspectiveAtScale,
+                                        "Perspective",
+                                    );
+                                });
+                            ui.separator();
+                            ui.checkbox(
+                                &mut browser.swarm_config.enable_disagreement,
+                                egui::RichText::new("Disagree").size(9.5),
+                            );
+                        });
+                        ui.add_space(3.0);
+                    }
+
                     // Button row
                     ui.horizontal(|ui| {
                         if is_busy {
@@ -231,6 +284,20 @@ pub fn agent_panel(ctx: &egui::Context, browser: &mut KitsuneBrowser) {
                             if ui.add(run_btn).clicked() || (enter_pressed && !is_busy) {
                                 start_agent_run(browser);
                             }
+                        }
+                        ui.add_space(4.0);
+                        let swarm_text = if browser.swarm_mode {
+                            egui::RichText::new("🐝 Swarm")
+                                .size(10.0)
+                                .color(egui::Color32::from_rgb(255, 200, 0))
+                                .strong()
+                        } else {
+                            egui::RichText::new("🐝 Swarm")
+                                .size(10.0)
+                                .color(KitsuneTheme::TEXT3)
+                        };
+                        if ui.button(swarm_text).clicked() && !is_busy {
+                            browser.swarm_mode = !browser.swarm_mode;
                         }
                         ui.add_space(4.0);
                         // Clear log button
@@ -276,30 +343,82 @@ pub fn agent_panel(ctx: &egui::Context, browser: &mut KitsuneBrowser) {
                 .inner_margin(egui::Margin::symmetric(12.0, 6.0))
                 .show(ui, |ui| {
                     for card in agents {
-                        if card.render(ui) && !is_busy {
-                            browser.agent_command = match card.name {
-                                "PriceTracker" => {
-                                    "Find the cheapest option available. Search at least 2-3 websites, compare prices, and report the best deal with the URL.".to_string()
+                        let selected = browser.selected_agent_card.as_deref() == Some(card.name);
+                        if card.render(ui, selected) && !is_busy {
+                            if selected {
+                                // Deselect if clicking the active card.
+                                browser.selected_agent_card = None;
+                            } else {
+                                browser.selected_agent_card = Some(card.name.to_string());
+                                // Pre-fill only when the command box is empty.
+                                if browser.agent_command.trim().is_empty() {
+                                    browser.agent_command = default_command_for_card(card.name);
                                 }
-                                "FormFillAgent" => {
-                                    if browser.attached_files.is_empty() {
-                                        "Fill in the form on the current page. Attach a document first (📎) if you need me to use your information.".to_string()
-                                    } else {
-                                        format!(
-                                            "Use the attached document '{}' to fill in the form or application on the current page.",
-                                            browser.attached_files[0].name
-                                        )
-                                    }
-                                }
-                                "ResearchAgent" => {
-                                    "Research this topic thoroughly. Visit multiple authoritative sources, extract key facts, and write a structured summary with your findings.".to_string()
-                                }
-                                _ => String::new(),
-                            };
+                            }
                         }
                         ui.add_space(4.0);
                     }
+
+                    // ── Swarm preset cards ────────────────────────────────
+                    ui.add_space(6.0);
+                    ui.label(
+                        egui::RichText::new("SWARM PRESETS")
+                            .size(9.0)
+                            .color(KitsuneTheme::TEXT3)
+                            .family(egui::FontFamily::Monospace),
+                    );
+                    ui.add_space(3.0);
+                    ui.horizontal_wrapped(|ui| {
+                        if ui.selectable_label(
+                            browser.swarm_mode && browser.swarm_config.mode == SwarmMode::DiscoveryAtScale,
+                            "🔍 Discovery",
+                        ).clicked() && !is_busy {
+                            browser.swarm_mode = true;
+                            browser.swarm_config.mode = SwarmMode::DiscoveryAtScale;
+                            browser.swarm_config.max_workers = 20;
+                        }
+                        if ui.selectable_label(
+                            browser.swarm_mode && browser.swarm_config.mode == SwarmMode::OutputAtScale,
+                            "📄 Report",
+                        ).clicked() && !is_busy {
+                            browser.swarm_mode = true;
+                            browser.swarm_config.mode = SwarmMode::OutputAtScale;
+                            browser.swarm_config.max_workers = 10;
+                        }
+                        if ui.selectable_label(
+                            browser.swarm_mode && browser.swarm_config.mode == SwarmMode::PerspectiveAtScale,
+                            "🧠 Expert Panel",
+                        ).clicked() && !is_busy {
+                            browser.swarm_mode = true;
+                            browser.swarm_config.mode = SwarmMode::PerspectiveAtScale;
+                            browser.swarm_config.max_workers = 5;
+                            browser.swarm_config.enable_disagreement = true;
+                        }
+                    });
                 });
+
+            // ── Swarm status bar (only when swarm is active) ──────────────
+            if let Some(state) = &browser.swarm_state {
+                egui::Frame::none()
+                    .inner_margin(egui::Margin::symmetric(12.0, 5.0))
+                    .fill(KitsuneTheme::BG2)
+                    .show(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            ui.label(
+                                egui::RichText::new("🐝 SWARM")
+                                    .size(9.5)
+                                    .strong()
+                                    .color(egui::Color32::from_rgb(255, 200, 0))
+                                    .family(egui::FontFamily::Monospace),
+                            );
+                            ui.separator();
+                            ui.label(egui::RichText::new(format!("🔵 {}", state.active_count())).size(9.5));
+                            ui.label(egui::RichText::new(format!("✅ {}", state.completed_count())).size(9.5));
+                            ui.label(egui::RichText::new(format!("🟡 {}", state.pending_count())).size(9.5));
+                        });
+                    });
+                paint_separator(ui);
+            }
 
             paint_separator(ui);
 
@@ -316,14 +435,22 @@ pub fn agent_panel(ctx: &egui::Context, browser: &mut KitsuneBrowser) {
                     );
                 });
 
+            // Detect new log entries so we can scroll to show them without
+            // using stick_to_bottom (which pins content to the bottom of the
+            // allocated space and produces a dark gap above when few entries exist).
+            let log_scroll_id = egui::Id::new("agent_log_scroll_state");
+            let prev_count = ui.ctx().data(|d| d.get_temp::<usize>(log_scroll_id).unwrap_or(0));
+            let curr_count = browser.agent_log.len();
+            ui.ctx().data_mut(|d| d.insert_temp(log_scroll_id, curr_count));
+            let has_new = curr_count > prev_count;
+
             let log_height = (ui.available_height() - 48.0).max(40.0);
             egui::ScrollArea::vertical()
                 .max_height(log_height)
-                .stick_to_bottom(true)
-                .auto_shrink([false; 2])
+                .auto_shrink([false, true])
                 .show(ui, |ui| {
                     egui::Frame::none()
-                        .inner_margin(egui::Margin::symmetric(12.0, 4.0))
+                        .inner_margin(egui::Margin::symmetric(12.0, 6.0))
                         .show(ui, |ui| {
                             if browser.agent_log.is_empty() {
                                 ui.label(
@@ -333,70 +460,159 @@ pub fn agent_panel(ctx: &egui::Context, browser: &mut KitsuneBrowser) {
                                         .family(egui::FontFamily::Monospace),
                                 );
                             }
-                            for entry in &browser.agent_log {
-                                let is_think = matches!(entry.level, LogLevel::Think);
-                                let txt = egui::RichText::new(&entry.text)
-                                    .size(if is_think { 10.5 } else { 11.0 })
-                                    .color(entry.color())
-                                    .family(egui::FontFamily::Monospace);
-                                let txt = if is_think { txt.italics() } else { txt };
-                                ui.label(
-                                    txt,
-                                );
+                            for (i, entry) in browser.agent_log.iter().enumerate() {
+                                ui.push_id(i, |ui| {
+                                    render_log_entry(ui, entry);
+                                });
+                            }
+                            if has_new {
+                                ui.scroll_to_cursor(Some(egui::Align::BOTTOM));
                             }
                         });
                 });
 
-            // ── Budget gauge (sticky bottom) ──────────────────────────
+            // ── Token usage (sticky bottom) ───────────────────────────
             paint_separator(ui);
             egui::Frame::none()
-                .inner_margin(egui::Margin::symmetric(12.0, 8.0))
+                .inner_margin(egui::Margin::symmetric(12.0, 7.0))
                 .show(ui, |ui| {
+                    let inp = browser.token_usage.input_tokens;
+                    let out = browser.token_usage.output_tokens;
+                    let cost_str = token_cost_display(&browser.settings_model, inp, out);
                     ui.horizontal(|ui| {
                         ui.label(
-                            egui::RichText::new("Budget")
-                                .size(10.0)
-                                .color(KitsuneTheme::TEXT2),
+                            egui::RichText::new("in")
+                                .size(9.0)
+                                .color(KitsuneTheme::TEXT3)
+                                .family(egui::FontFamily::Monospace),
                         );
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            ui.label(
-                                egui::RichText::new(format!(
-                                    "{}/{}",
-                                    browser.budget.used, browser.budget.total
-                                ))
+                        ui.label(
+                            egui::RichText::new(fmt_tokens(inp))
                                 .size(10.0)
                                 .color(KitsuneTheme::TEXT2)
                                 .family(egui::FontFamily::Monospace),
+                        );
+                        ui.add_space(8.0);
+                        ui.label(
+                            egui::RichText::new("out")
+                                .size(9.0)
+                                .color(KitsuneTheme::TEXT3)
+                                .family(egui::FontFamily::Monospace),
+                        );
+                        ui.label(
+                            egui::RichText::new(fmt_tokens(out))
+                                .size(10.0)
+                                .color(KitsuneTheme::TEXT2)
+                                .family(egui::FontFamily::Monospace),
+                        );
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            let col = if cost_str == "free" || cost_str == "local" {
+                                KitsuneTheme::GREEN
+                            } else {
+                                KitsuneTheme::TEXT2
+                            };
+                            ui.label(
+                                egui::RichText::new(&cost_str)
+                                    .size(10.0)
+                                    .color(col)
+                                    .family(egui::FontFamily::Monospace),
                             );
                         });
                     });
-                    ui.add_space(3.0);
-                    let frac = browser.budget.fraction();
-                    let (bar_rect, _) = ui.allocate_exact_size(
-                        egui::vec2(ui.available_width(), 3.0),
-                        egui::Sense::hover(),
-                    );
-                    ui.painter().rect_filled(
-                        bar_rect,
-                        egui::Rounding::same(2.0),
-                        KitsuneTheme::BG4,
-                    );
-                    let mut fill_rect = bar_rect;
-                    fill_rect.set_right(bar_rect.left() + bar_rect.width() * frac);
-                    let bar_col = if frac > 0.8 {
-                        KitsuneTheme::RED
-                    } else if frac > 0.4 {
-                        KitsuneTheme::AMBER
-                    } else {
-                        KitsuneTheme::GREEN
-                    };
-                    ui.painter().rect_filled(
-                        fill_rect,
-                        egui::Rounding::same(2.0),
-                        bar_col,
-                    );
                 });
         });
+}
+
+/// Render a single log entry with styled prefix, color, and collapsible thinking.
+fn render_log_entry(ui: &mut egui::Ui, entry: &LogEntry) {
+    match entry.level {
+        LogLevel::Think => {
+            // Collapsible block — short preview in the header, full text when expanded.
+            let preview: String = entry.text.chars().take(72).collect();
+            let preview = if entry.text.chars().count() > 72 {
+                format!("{}…", preview)
+            } else {
+                preview.clone()
+            };
+            let header_text = egui::RichText::new(format!("💭 {}", preview))
+                .size(10.0)
+                .italics()
+                .color(KitsuneTheme::TEXT3)
+                .family(egui::FontFamily::Monospace);
+            egui::CollapsingHeader::new(header_text)
+                .default_open(false)
+                .show(ui, |ui| {
+                    egui::Frame::none()
+                        .fill(KitsuneTheme::BG2)
+                        .rounding(egui::Rounding::same(4.0))
+                        .inner_margin(egui::Margin::symmetric(8.0, 6.0))
+                        .show(ui, |ui| {
+                            ui.label(
+                                egui::RichText::new(&entry.text)
+                                    .size(10.0)
+                                    .italics()
+                                    .color(KitsuneTheme::TEXT3)
+                                    .family(egui::FontFamily::Monospace),
+                            );
+                        });
+                });
+        }
+        LogLevel::Cmd => {
+            ui.add_space(2.0);
+            ui.label(
+                egui::RichText::new(&entry.text)
+                    .size(12.0)
+                    .strong()
+                    .color(KitsuneTheme::BLUE)
+                    .family(egui::FontFamily::Monospace),
+            );
+            ui.add_space(1.0);
+        }
+        LogLevel::Ok => {
+            ui.label(
+                egui::RichText::new(&entry.text)
+                    .size(11.0)
+                    .strong()
+                    .color(KitsuneTheme::GREEN)
+                    .family(egui::FontFamily::Monospace),
+            );
+        }
+        LogLevel::Warn => {
+            ui.label(
+                egui::RichText::new(&entry.text)
+                    .size(11.0)
+                    .color(KitsuneTheme::AMBER)
+                    .family(egui::FontFamily::Monospace),
+            );
+        }
+        LogLevel::Block => {
+            ui.label(
+                egui::RichText::new(&entry.text)
+                    .size(11.0)
+                    .color(KitsuneTheme::RED)
+                    .family(egui::FontFamily::Monospace),
+            );
+        }
+        LogLevel::Step => {
+            ui.horizontal(|ui| {
+                ui.add_space(10.0);
+                ui.label(
+                    egui::RichText::new(&entry.text)
+                        .size(10.5)
+                        .color(KitsuneTheme::TEXT1)
+                        .family(egui::FontFamily::Monospace),
+                );
+            });
+        }
+        LogLevel::Info => {
+            ui.label(
+                egui::RichText::new(&entry.text)
+                    .size(10.5)
+                    .color(KitsuneTheme::TEXT2)
+                    .family(egui::FontFamily::Monospace),
+            );
+        }
+    }
 }
 
 fn paint_separator(ui: &mut egui::Ui) {
@@ -411,6 +627,7 @@ fn paint_separator(ui: &mut egui::Ui) {
 fn start_agent_run(browser: &mut KitsuneBrowser) {
     browser.agent_state = AgentRunState::Running;
     browser.agent_log.clear();
+    browser.token_usage = TokenUsageState::default();
     browser.privacy.trackers_blocked = 0;
     browser.privacy.referrers_stripped = 0;
 
@@ -444,6 +661,10 @@ fn start_agent_run(browser: &mut KitsuneBrowser) {
     let file_perm_slot = browser.file_perm_slot.clone();
     let stop_flag = browser.agent_stop_flag.clone();
     let spec = build_runtime_spec(browser);
+    let agent_context = browser.selected_agent_card
+        .as_deref()
+        .map(specialist_context)
+        .unwrap_or_default();
 
     let endpoint = browser.settings_endpoint.trim().to_string();
     let model = browser.settings_model.trim().to_string();
@@ -486,20 +707,65 @@ fn start_agent_run(browser: &mut KitsuneBrowser) {
         }
     };
 
+    // ── Swarm branch ─────────────────────────────────────────────────────────
+    if browser.swarm_mode {
+        let mut swarm_config = browser.swarm_config.clone();
+        if swarm_config.max_workers == 0 {
+            swarm_config.max_workers = 1;
+        }
+        let ai_client = match AgentAiClient::new(ai_config.clone()) {
+            Ok(c) => Arc::new(c),
+            Err(e) => {
+                browser.push_log(format!("Failed to build AI client for swarm: {}", e), LogLevel::Block);
+                browser.agent_state = AgentRunState::Idle;
+                return;
+            }
+        };
+        browser.swarm_state = None;
+        let goal = cmd.clone();
+        browser.runtime().spawn(async move {
+            run_swarm(
+                spec, ai_config, ai_client, swarm_config, goal,
+                vault, hil_gate, webview_tx, agent_tx, stop_flag,
+            )
+            .await;
+        });
+        return;
+    }
+
     // Build context from any attached files.
+    // Binary files (PDF, DOCX, …) produce garbage when read as raw bytes — reference
+    // them by name only so the model can use read_file to access them on demand.
     let context = if browser.attached_files.is_empty() {
         String::new()
     } else {
         browser
             .attached_files
             .iter()
-            .map(|f| format!("=== ATTACHED: {} ===\n{}\n=== END ===", f.name, f.content))
+            .map(|f| {
+                let ext = f.name.rsplit('.').next().unwrap_or("").to_lowercase();
+                let is_binary = matches!(ext.as_str(), "pdf" | "docx" | "xlsx" | "pptx" | "doc" | "xls" | "ppt" | "zip" | "png" | "jpg" | "jpeg" | "gif" | "webp");
+                if is_binary {
+                    format!(
+                        "=== ATTACHED FILE: {} ===\n(Binary file — use {{\"action\":\"read_file\",\"path\":\"{}\"}} to read it)\n=== END ===",
+                        f.name, f.path
+                    )
+                } else {
+                    // Truncate very large text files so they don't overflow the context window.
+                    let content = if f.content.len() > 12_000 {
+                        format!("{}\n… (truncated)", &f.content[..12_000])
+                    } else {
+                        f.content.clone()
+                    };
+                    format!("=== ATTACHED: {} ===\n{}\n=== END ===", f.name, content)
+                }
+            })
             .collect::<Vec<_>>()
             .join("\n\n")
     };
 
     browser.runtime().spawn(async move {
-        run_in_process_agent(spec, ai_config, cmd, context, vault, hil_gate, webview_tx, agent_tx, file_perm_slot, stop_flag).await;
+        run_in_process_agent(spec, ai_config, cmd, context, agent_context, vault, hil_gate, webview_tx, agent_tx, file_perm_slot, stop_flag).await;
     });
 
     // ── Orchestrator parallel path ────────────────────────────────────────
@@ -578,6 +844,7 @@ async fn run_in_process_agent(
     ai_config: AiProviderConfig,
     prompt: String,
     context: String,
+    agent_context: String,
     vault: std::sync::Arc<kitsune_vault::VaultBackend>,
     hil_gate: std::sync::Arc<kitsune_hil::HilGate>,
     webview_tx: tokio::sync::mpsc::Sender<kitsune_agent::executor::WebViewCommand>,
@@ -590,7 +857,8 @@ async fn run_in_process_agent(
     let runtime = LlmAgentRuntime::new_with_config(spec, ai_config, webview_tx, vault, hil_gate)
         .with_event_sink(events_tx)
         .with_file_perm_slot(file_perm_slot)
-        .with_stop_flag(stop_flag);
+        .with_stop_flag(stop_flag)
+        .with_agent_context(agent_context);
 
     // Prepend attached file context to the prompt when files are attached.
     let full_prompt = if context.is_empty() {
@@ -602,27 +870,51 @@ async fn run_in_process_agent(
     // Pump events to the UI as they happen.
     // NOTE: AgentEvent::Done is handled here — do NOT send another Done after
     // runtime.run() returns on the Ok path; that would duplicate the final answer.
+    // Swarm variants (SwarmUpdate, SwarmPlanReady, SwarmDone, SwarmError) are
+    // forwarded directly; returning None skips the send for unhandled variants.
     let pump_tx = ui_tx.clone();
     let pump = tokio::spawn(async move {
         while let Some(event) = events_rx.recv().await {
-            let action = match event {
-                AgentEvent::Log(m) => AgentSseAction::Log {
+            let action: Option<AgentSseAction> = match event {
+                AgentEvent::Log(m) => Some(AgentSseAction::Log {
                     message: m,
                     class: "info".into(),
-                },
-                AgentEvent::Thinking(t) => AgentSseAction::Log {
-                    message: format!("💭 {}", truncate_str(&t, 500)),
+                }),
+                AgentEvent::Step(m) => Some(AgentSseAction::Log {
+                    message: m,
+                    class: "step".into(),
+                }),
+                // Raw thinking text — no prefix/truncation; the UI renders it collapsibly.
+                AgentEvent::Thinking(t) => Some(AgentSseAction::Log {
+                    message: t,
                     class: "think".into(),
-                },
-                AgentEvent::Navigated(u) => AgentSseAction::UrlUpdate { url: u },
-                AgentEvent::Done(m) => AgentSseAction::Done { message: m },
-                AgentEvent::Error(e) => AgentSseAction::Log {
+                }),
+                AgentEvent::Navigated(u) => Some(AgentSseAction::UrlUpdate { url: u }),
+                AgentEvent::Done(m) => Some(AgentSseAction::Done { message: m }),
+                AgentEvent::Error(e) => Some(AgentSseAction::Log {
                     message: e,
                     class: "block".into(),
-                },
+                }),
+                AgentEvent::TokenUsage { input, output } => {
+                    Some(AgentSseAction::TokenUsage { input, output })
+                }
+                AgentEvent::SwarmPlanReady { swarm_id, goal, tasks } => {
+                    Some(AgentSseAction::SwarmPlanReady { swarm_id, goal, tasks })
+                }
+                AgentEvent::SwarmUpdate { swarm_id, worker_id, role, status, message, tool_calls_used } => {
+                    Some(AgentSseAction::SwarmUpdate { swarm_id, worker_id, role, status, message, tool_calls_used })
+                }
+                AgentEvent::SwarmDone { swarm_id, final_answer, total_tool_calls } => {
+                    Some(AgentSseAction::SwarmDone { swarm_id, final_answer, total_tool_calls })
+                }
+                AgentEvent::SwarmError { swarm_id, error } => {
+                    Some(AgentSseAction::SwarmError { swarm_id, error })
+                }
             };
-            if pump_tx.send(action).is_err() {
-                break;
+            if let Some(a) = action {
+                if pump_tx.send(a).is_err() {
+                    break;
+                }
             }
         }
     });
@@ -645,13 +937,158 @@ async fn run_in_process_agent(
     }
 }
 
-fn truncate_str(s: &str, n: usize) -> String {
-    let count = s.chars().count();
-    if count <= n {
-        s.to_string()
+async fn run_swarm(
+    spec: kitsune_agent::spec::AgentSpec,
+    ai_config: kitsune_agent::ai_client::AiProviderConfig,
+    ai_client: Arc<kitsune_agent::ai_client::AgentAiClient>,
+    config: kitsune_agent::swarm::types::SwarmConfig,
+    goal: String,
+    vault: Arc<kitsune_vault::VaultBackend>,
+    hil_gate: Arc<kitsune_hil::HilGate>,
+    webview_tx: tokio::sync::mpsc::Sender<kitsune_agent::executor::WebViewCommand>,
+    ui_tx: std::sync::mpsc::Sender<AgentSseAction>,
+    stop_flag: kitsune_agent::StopFlag,
+) {
+    use kitsune_agent::swarm::coordinator::SwarmCoordinator;
+    use kitsune_agent::AgentEvent;
+
+    let (events_tx, mut events_rx) = tokio::sync::mpsc::unbounded_channel::<AgentEvent>();
+
+    let coordinator = SwarmCoordinator {
+        goal,
+        config,
+        spec,
+        ai_client,
+        ai_config,
+        event_tx: events_tx.clone(),
+        browser_tx: webview_tx,
+        vault,
+        hil_gate,
+        stop_flag,
+    };
+
+    let pump_tx = ui_tx.clone();
+    let pump = tokio::spawn(async move {
+        while let Some(event) = events_rx.recv().await {
+            let maybe_action: Option<AgentSseAction> = match event {
+                AgentEvent::Log(m) => Some(AgentSseAction::Log { message: m, class: "info".into() }),
+                AgentEvent::Step(m) => Some(AgentSseAction::Log { message: m, class: "step".into() }),
+                AgentEvent::Thinking(t) => Some(AgentSseAction::Log { message: t, class: "think".into() }),
+                AgentEvent::Navigated(u) => Some(AgentSseAction::UrlUpdate { url: u }),
+                AgentEvent::Done(m) => Some(AgentSseAction::Log { message: m, class: "ok".into() }),
+                AgentEvent::Error(e) => Some(AgentSseAction::Log { message: e, class: "block".into() }),
+                AgentEvent::TokenUsage { input, output } => Some(AgentSseAction::TokenUsage { input, output }),
+                AgentEvent::SwarmUpdate { swarm_id, worker_id, role, status, message, tool_calls_used } => {
+                    Some(AgentSseAction::SwarmUpdate { swarm_id, worker_id, role, status, message, tool_calls_used })
+                }
+                AgentEvent::SwarmPlanReady { swarm_id, goal, tasks } => {
+                    Some(AgentSseAction::SwarmPlanReady { swarm_id, goal, tasks })
+                }
+                AgentEvent::SwarmDone { swarm_id, final_answer, total_tool_calls } => {
+                    Some(AgentSseAction::SwarmDone { swarm_id, final_answer, total_tool_calls })
+                }
+                AgentEvent::SwarmError { swarm_id, error } => {
+                    Some(AgentSseAction::SwarmError { swarm_id, error })
+                }
+            };
+            if let Some(action) = maybe_action {
+                if pump_tx.send(action).is_err() {
+                    break;
+                }
+            }
+        }
+    });
+
+    let result = coordinator.run().await;
+    drop(events_tx);
+    let _ = pump.await;
+
+    if let Err(e) = result {
+        tracing::error!("Swarm coordinator error: {:?}", e);
+        let _ = ui_tx.send(AgentSseAction::Done { message: String::new() });
+    }
+}
+
+fn default_command_for_card(card_name: &str) -> String {
+    match card_name {
+        "PriceTracker" => "Find the cheapest option available. Search at least 2-3 websites, compare prices, and report the best deal with the URL.".to_string(),
+        "FormFillAgent" => "Fill in the form on the current page using my attached document.".to_string(),
+        "ResearchAgent" => "Research this topic thoroughly. Visit multiple authoritative sources, extract key facts, and write a structured summary.".to_string(),
+        _ => String::new(),
+    }
+}
+
+fn fmt_tokens(n: u32) -> String {
+    if n == 0 {
+        "--".into()
+    } else if n < 1_000 {
+        format!("{}", n)
     } else {
-        let mut out: String = s.chars().take(n).collect();
-        out.push('…');
-        out
+        format!("{:.1}k", n as f32 / 1_000.0)
+    }
+}
+
+/// Estimate cost in USD based on model name patterns and cumulative token counts.
+/// Returns "local" for Ollama/unknown models, or a "$X.XXXX" string for cloud models.
+fn token_cost_display(model: &str, input: u32, output: u32) -> String {
+    if input == 0 && output == 0 {
+        return "--".into();
+    }
+    let m = model.to_lowercase();
+    let (in_per_m, out_per_m): (f64, f64) = if m.contains("claude") {
+        if m.contains("haiku") {
+            (0.80, 4.0)
+        } else if m.contains("opus") {
+            (15.0, 75.0)
+        } else {
+            (3.0, 15.0) // sonnet default
+        }
+    } else if m.contains("gpt-4o-mini") {
+        (0.15, 0.60)
+    } else if m.contains("gpt-4o") {
+        (2.50, 10.0)
+    } else if m.contains("gemini-2.0-flash") || m.contains("gemini-flash") {
+        (0.075, 0.30)
+    } else if m.contains("gemini") {
+        (1.25, 5.0)
+    } else if m.contains("llama") || m.contains("mixtral") || m.contains("mistral") {
+        (0.27, 0.27) // Groq blended approximate
+    } else {
+        return "local".into();
+    };
+    let cost = (input as f64 / 1_000_000.0 * in_per_m) + (output as f64 / 1_000_000.0 * out_per_m);
+    if cost < 0.000_1 {
+        "$0.0000".into()
+    } else if cost < 0.01 {
+        format!("${:.4}", cost)
+    } else {
+        format!("${:.3}", cost)
+    }
+}
+
+fn specialist_context(card_name: &str) -> String {
+    match card_name {
+        "PriceTracker" => {
+            "You are a price-tracking specialist. Your goal is to find the absolute cheapest \
+             option across at least 2-3 different websites. Always navigate to comparison sites \
+             or individual retailers, extract prices, and compare them before reporting. \
+             Include the exact URL of the best deal in your final answer."
+                .to_string()
+        }
+        "FormFillAgent" => {
+            "You are a form-filling specialist. Your goal is to fill in web forms accurately \
+             using the information from any attached documents. Read the attached file first, \
+             then locate form fields on the page and fill them in. \
+             Ask for HIL approval before submitting any form."
+                .to_string()
+        }
+        "ResearchAgent" => {
+            "You are a deep-research specialist. Your goal is to visit multiple authoritative \
+             sources (at least 3), extract key facts, compare perspectives, and produce a \
+             structured, comprehensive report. Do not stop after visiting a single page — \
+             keep researching until you have enough depth to give a thorough answer."
+                .to_string()
+        }
+        _ => String::new(),
     }
 }

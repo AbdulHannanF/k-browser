@@ -127,7 +127,7 @@ pub fn session_panel(ctx: &egui::Context, browser: &KitsuneBrowser) {
                     )
                     .default_open(false)
                     .show(ui, |ui| {
-                        task_graph_panel(ui, &browser.task_nodes);
+                        task_graph_panel(ui, &browser.swarm_state);
                     });
                 });
         });
