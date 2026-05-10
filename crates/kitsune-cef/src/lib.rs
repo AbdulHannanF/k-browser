@@ -72,7 +72,7 @@ impl CefBrowser {
         let webview = WebViewBuilder::new_as_child(&parent)
             .with_bounds(bounds.into())
             .with_url(url)
-            .with_background_color((19, 20, 24, 255))
+            .with_background_color((8, 8, 10, 255))  // matches BG_VOID so any sub-pixel gap is invisible
             .with_devtools(cfg!(debug_assertions))
             .with_browser_accelerator_keys(true)
             // Redirect window.open() and target="_blank" links back to the same tab so the

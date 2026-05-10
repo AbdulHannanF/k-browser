@@ -72,8 +72,16 @@ impl IntoResponse for HtmlPage {
 // ---------------------------------------------------------------------------
 
 /// GET / — welcome / home page.
-async fn serve_welcome() -> HtmlPage {
-    HtmlPage(Html(pages::WELCOME_HTML))
+async fn serve_welcome() -> impl IntoResponse {
+    (
+        [(header::CONTENT_TYPE, "text/html; charset=utf-8")],
+        include_str!("../static/index.html")
+    )
+}
+
+/// GET /health — health check for Render.
+async fn serve_health() -> impl IntoResponse {
+    "OK"
 }
 
 /// GET /shop — demo e-commerce store.
@@ -492,6 +500,7 @@ pub fn router() -> Router {
     Router::new()
         // Page routes
         .route("/", get(serve_welcome))
+        .route("/health", get(serve_health))
         .route("/shop", get(serve_shop))
         .route("/privacy", get(serve_privacy))
         .route("/favicon.ico", get(serve_favicon))

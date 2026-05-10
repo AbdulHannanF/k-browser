@@ -1062,6 +1062,30 @@ impl eframe::App for KitsuneBrowser {
         // ── Chrome: Top bar ──────────────────────────────────────────────
         top_bar(ctx, self);
 
+        // Status bar must be declared before side panels so it claims the
+        // full window width. Side panels fill the remaining height after
+        // top + bottom panels have been allocated.
+        egui::TopBottomPanel::bottom("status_bar")
+            .exact_height(18.0)
+            .frame(
+                egui::Frame::none()
+                    .fill(KitsuneTheme::BG)
+                    .stroke(egui::Stroke::new(1.0, KitsuneTheme::BORDER)),
+            )
+            .show(ctx, |ui| {
+                ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                    ui.add_space(8.0);
+                    if !self.hover_url.is_empty() {
+                        ui.label(
+                            egui::RichText::new(&self.hover_url)
+                                .size(10.0)
+                                .color(KitsuneTheme::TEXT3)
+                                .family(egui::FontFamily::Monospace),
+                        );
+                    }
+                });
+            });
+
         // ── Left panel: Agent workspace ──────────────────────────────────
         agent_panel(ctx, self);
 
@@ -1137,28 +1161,6 @@ impl eframe::App for KitsuneBrowser {
 
         // ── Overlay: Settings dialog ─────────────────────────────────────
         settings_dialog(ctx, self);
-
-        // ── Status bar (bottom) ──────────────────────────────────────────
-        egui::TopBottomPanel::bottom("status_bar")
-            .exact_height(18.0)
-            .frame(
-                egui::Frame::none()
-                    .fill(KitsuneTheme::BG)
-                    .stroke(egui::Stroke::new(1.0, KitsuneTheme::BORDER)),
-            )
-            .show(ctx, |ui| {
-                ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
-                    ui.add_space(8.0);
-                    if !self.hover_url.is_empty() {
-                        ui.label(
-                            egui::RichText::new(&self.hover_url)
-                                .size(10.0)
-                                .color(KitsuneTheme::TEXT3)
-                                .family(egui::FontFamily::Monospace),
-                        );
-                    }
-                });
-            });
 
         // ── Find bar (floating overlay) ──────────────────────────────────
         if self.show_find_bar {
@@ -1373,11 +1375,17 @@ fn render_fallback(ui: &mut egui::Ui, startup_error: Option<&str>, current_url: 
 }
 
 fn rect_to_cef_bounds(rect: egui::Rect, scale: f32) -> CefRect {
+    // Floor the top-left so the WebView never starts below the panel edge.
+    // Ceil the bottom-right so the WebView never leaves an uncovered strip.
+    let x      = (rect.min.x * scale).floor() as i32;
+    let y      = (rect.min.y * scale).floor() as i32;
+    let right  = (rect.max.x * scale).ceil()  as i32;
+    let bottom = (rect.max.y * scale).ceil()  as i32;
     CefRect {
-        x: (rect.min.x * scale).round() as i32,
-        y: (rect.min.y * scale).round() as i32,
-        width: (rect.width() * scale).max(1.0).round() as u32,
-        height: (rect.height() * scale).max(1.0).round() as u32,
+        x,
+        y,
+        width:  (right  - x).max(1) as u32,
+        height: (bottom - y).max(1) as u32,
     }
 }
 
@@ -1399,18 +1407,22 @@ mod tests {
 
     #[test]
     fn rect_conversion_preserves_geometry() {
+        // floor(min), ceil(max): position never rounds up (no gap), size rounds out (no gap)
+        // min=(10.4, 21.6)  max=(650.0, 501.1)
+        // x=floor(10.4)=10  y=floor(21.6)=21
+        // right=ceil(650.0)=650  bottom=ceil(501.1)=502
+        // w=640  h=481
         let rect = egui::Rect::from_min_size(egui::pos2(10.4, 21.6), egui::vec2(639.6, 479.5));
         let bounds = rect_to_cef_bounds(rect, 1.0);
         assert_eq!(bounds.x, 10);
-        assert_eq!(bounds.y, 22);
+        assert_eq!(bounds.y, 21);
         assert_eq!(bounds.width, 640);
-        assert_eq!(bounds.height, 480);
+        assert_eq!(bounds.height, 481);
     }
 
     #[test]
     fn rect_conversion_scales_for_dpi() {
-        // At 1.5× DPI, a rect at logical (100, 30) size 600×400 becomes
-        // physical (150, 45) size 900×600.
+        // At 1.5× DPI, a rect at logical (100, 30) size 600×400.
         let rect = egui::Rect::from_min_size(egui::pos2(100.0, 30.0), egui::vec2(600.0, 400.0));
         let bounds = rect_to_cef_bounds(rect, 1.5);
         assert_eq!(bounds.x, 150);
