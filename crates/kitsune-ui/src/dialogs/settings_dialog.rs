@@ -17,7 +17,7 @@ pub fn settings_dialog(ctx: &egui::Context, browser: &mut KitsuneBrowser) {
         .frame(
             egui::Frame::window(&ctx.style())
                 .fill(KitsuneTheme::BG1)
-                .inner_margin(16.0)
+                .inner_margin(14.0)
                 .rounding(8.0)
                 .stroke(egui::Stroke::new(1.0, KitsuneTheme::BORDER)),
         )
@@ -30,16 +30,22 @@ pub fn settings_dialog(ctx: &egui::Context, browser: &mut KitsuneBrowser) {
                 tab_btn(ui, &mut browser.settings_tab, SettingsTab::Profile, "Profile");
                 tab_btn(ui, &mut browser.settings_tab, SettingsTab::Agents, "Agents");
             });
-            ui.add_space(10.0);
+            ui.add_space(6.0);
             ui.separator();
-            ui.add_space(8.0);
+            ui.add_space(6.0);
 
-            // ── Tab content ──────────────────────────────────────────────
-            match browser.settings_tab {
-                SettingsTab::Llm => render_llm_tab(ui, browser),
-                SettingsTab::Profile => render_profile_tab(ui, browser),
-                SettingsTab::Agents => render_agents_tab(ui, browser),
-            }
+            // ── Tab content — fixed height so the window doesn't jump between providers ──
+            egui::ScrollArea::vertical()
+                .max_height(340.0)
+                .auto_shrink([false, false])
+                .show(ui, |ui| {
+                    ui.set_width(460.0);
+                    match browser.settings_tab {
+                        SettingsTab::Llm => render_llm_tab(ui, browser),
+                        SettingsTab::Profile => render_profile_tab(ui, browser),
+                        SettingsTab::Agents => render_agents_tab(ui, browser),
+                    }
+                });
         });
 
     browser.show_settings = is_open;
@@ -66,22 +72,19 @@ fn tab_btn(ui: &mut egui::Ui, current: &mut SettingsTab, target: SettingsTab, la
 // ─── LLM tab (existing content) ─────────────────────────────────────────────
 
 fn render_llm_tab(ui: &mut egui::Ui, browser: &mut KitsuneBrowser) {
-    ui.heading(
-        egui::RichText::new("Agent LLM Configuration")
-            .color(KitsuneTheme::TEXT_PRIMARY)
-            .size(16.0),
-    );
+    ui.horizontal(|ui| {
+        ui.heading(
+            egui::RichText::new("Agent LLM")
+                .color(KitsuneTheme::TEXT_PRIMARY)
+                .size(15.0),
+        );
+        ui.label(
+            egui::RichText::new("— configure or leave blank to use the built-in planner.")
+                .color(KitsuneTheme::TEXT2)
+                .size(11.0),
+        );
+    });
     ui.add_space(8.0);
-
-    ui.label(
-        egui::RichText::new(
-            "Choose how the agent thinks. The browser ships with a built-in offline planner — \
-             configuring an LLM upgrades it.",
-        )
-        .color(KitsuneTheme::TEXT2)
-        .size(12.0),
-    );
-    ui.add_space(14.0);
 
     // ── Provider toggle ──────────────────────────────────────────────────
     ui.label(
@@ -91,7 +94,7 @@ fn render_llm_tab(ui: &mut egui::Ui, browser: &mut KitsuneBrowser) {
             .color(KitsuneTheme::TEXT2)
             .family(egui::FontFamily::Monospace),
     );
-    ui.add_space(4.0);
+    ui.add_space(2.0);
     ui.horizontal(|ui| {
         let prev = browser.settings_provider;
         ui.radio_value(
@@ -126,7 +129,7 @@ fn render_llm_tab(ui: &mut egui::Ui, browser: &mut KitsuneBrowser) {
 
     // ── Preset picker (Cloud only) ────────────────────────────────────────
     if browser.settings_provider == SettingsProvider::Cloud {
-        ui.add_space(8.0);
+        ui.add_space(6.0);
         ui.label(
             egui::RichText::new("PRESET")
                 .size(10.0)
@@ -134,8 +137,8 @@ fn render_llm_tab(ui: &mut egui::Ui, browser: &mut KitsuneBrowser) {
                 .color(KitsuneTheme::TEXT2)
                 .family(egui::FontFamily::Monospace),
         );
-        ui.add_space(4.0);
-        ui.with_layout(egui::Layout::left_to_right(egui::Align::Center).with_main_wrap(false), |ui| {
+        ui.add_space(2.0);
+        ui.horizontal(|ui| {
             for preset in [
                 CloudPreset::Claude,
                 CloudPreset::OpenAI,
@@ -166,7 +169,7 @@ fn render_llm_tab(ui: &mut egui::Ui, browser: &mut KitsuneBrowser) {
         });
     }
 
-    ui.add_space(14.0);
+    ui.add_space(8.0);
 
     // ── Per-provider fields ──────────────────────────────────────────────
     egui::Grid::new("settings_grid")
@@ -213,31 +216,25 @@ fn render_llm_tab(ui: &mut egui::Ui, browser: &mut KitsuneBrowser) {
             ui.end_row();
         });
 
-    ui.add_space(8.0);
+    ui.add_space(4.0);
 
     if browser.settings_provider == SettingsProvider::Ollama {
         ui.label(
-            egui::RichText::new(
-                "Ollama runs entirely on your machine — no data leaves the device. \
-                 Make sure `ollama serve` is running and the model is pulled \
-                 (e.g. `ollama pull llama3.2`).",
-            )
-            .size(11.0)
-            .color(KitsuneTheme::TEXT2),
+            egui::RichText::new("Ollama runs locally — no data leaves the device. Run `ollama serve` first.")
+                .size(11.0)
+                .color(KitsuneTheme::TEXT2),
         );
     } else {
         ui.label(
             egui::RichText::new(
-                "Works with Claude (Anthropic), OpenAI, Gemini (Google), Groq, OpenRouter, \
-                 or any provider with an OpenAI-compatible /v1/chat/completions endpoint. \
-                 Select a preset above to auto-fill the URL.",
+                "Compatible with Claude, OpenAI, Gemini, Groq, OpenRouter, or any /v1/chat/completions endpoint.",
             )
             .size(11.0)
             .color(KitsuneTheme::TEXT2),
         );
     }
 
-    ui.add_space(14.0);
+    ui.add_space(8.0);
 
     if let Some(status) = &browser.settings_test_status.clone() {
         ui.label(
@@ -246,7 +243,7 @@ fn render_llm_tab(ui: &mut egui::Ui, browser: &mut KitsuneBrowser) {
                 .color(KitsuneTheme::TEXT1)
                 .family(egui::FontFamily::Monospace),
         );
-        ui.add_space(8.0);
+        ui.add_space(4.0);
     }
 
     ui.horizontal(|ui| {
@@ -295,18 +292,16 @@ fn render_profile_tab(ui: &mut egui::Ui, browser: &mut KitsuneBrowser) {
     ui.heading(
         egui::RichText::new("Document Profile")
             .color(KitsuneTheme::TEXT_PRIMARY)
-            .size(16.0),
-    );
-    ui.add_space(8.0);
-
-    ui.label(
-        egui::RichText::new(
-            "Folder containing your CV, transcripts, and supporting documents:",
-        )
-        .color(KitsuneTheme::TEXT1)
-        .size(12.0),
+            .size(15.0),
     );
     ui.add_space(6.0);
+
+    ui.label(
+        egui::RichText::new("Folder with your CV, transcripts, and supporting documents:")
+            .color(KitsuneTheme::TEXT1)
+            .size(12.0),
+    );
+    ui.add_space(4.0);
 
     ui.horizontal(|ui| {
         ui.add(
@@ -355,14 +350,7 @@ fn render_agents_tab(ui: &mut egui::Ui, browser: &mut KitsuneBrowser) {
     ui.heading(
         egui::RichText::new("Agent Configuration")
             .color(KitsuneTheme::TEXT_PRIMARY)
-            .size(16.0),
-    );
-    ui.add_space(8.0);
-
-    ui.label(
-        egui::RichText::new("Model names or provider IDs:")
-            .color(KitsuneTheme::TEXT1)
-            .size(12.0),
+            .size(15.0),
     );
     ui.add_space(6.0);
 

@@ -17,8 +17,8 @@ pub struct AgentCard {
 }
 
 impl AgentCard {
-    /// Returns true if the card was clicked.
-    pub fn render(&self, ui: &mut egui::Ui) -> bool {
+    /// Returns true if the card was clicked. `selected` highlights the card as active.
+    pub fn render(&self, ui: &mut egui::Ui, selected: bool) -> bool {
         let (badge_col, badge_txt) = match self.status {
             AgentStatus::Idle => (KitsuneTheme::TEXT2, "idle"),
             AgentStatus::Running => (KitsuneTheme::AMBER, "running"),
@@ -26,12 +26,14 @@ impl AgentCard {
             AgentStatus::Error => (KitsuneTheme::RED_BLOCKED, "error"),
         };
         let is_running = self.status == AgentStatus::Running;
-        let fill = if is_running {
+        let fill = if selected {
+            KitsuneTheme::AMBER_DIM
+        } else if is_running {
             KitsuneTheme::AMBER_DIM
         } else {
             KitsuneTheme::BG_CARD
         };
-        let stroke_col = if is_running {
+        let stroke_col = if selected || is_running {
             KitsuneTheme::BORDER_AMBER
         } else {
             KitsuneTheme::BORDER

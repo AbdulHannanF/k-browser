@@ -17,6 +17,8 @@ pub enum AgentAction {
     Read { selector: String },
     /// Read a file from the local filesystem (requires user permission modal).
     ReadFile { path: String },
+    /// Download a file from a URL and save it to the user's Downloads folder.
+    Download { url: String, filename: Option<String> },
     Done { answer: String },
 }
 

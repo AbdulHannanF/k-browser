@@ -45,6 +45,10 @@ struct ChatResponseMessage {
 struct ChatResponse {
     #[serde(default)]
     message: Option<ChatResponseMessage>,
+    #[serde(default)]
+    prompt_eval_count: u32,
+    #[serde(default)]
+    eval_count: u32,
 }
 
 impl OllamaClient {
@@ -71,7 +75,7 @@ impl OllamaClient {
         &self,
         system: &str,
         history: Vec<(String, String)>,
-    ) -> Result<String, AgentError> {
+    ) -> Result<(String, u32, u32), AgentError> {
         let mut messages = Vec::with_capacity(history.len() + 1);
         messages.push(ChatMessage {
             role: "system",
@@ -123,6 +127,10 @@ impl OllamaClient {
             .await
             .map_err(|e| AgentError::ExecutionError(format!("Ollama bad JSON: {}", e)))?;
 
-        Ok(parsed.message.map(|m| m.content).unwrap_or_default())
+        Ok((
+            parsed.message.map(|m| m.content).unwrap_or_default(),
+            parsed.prompt_eval_count,
+            parsed.eval_count,
+        ))
     }
 }
