@@ -12,6 +12,8 @@
 
 pub mod action;
 pub mod ai_client;
+pub mod captcha;
+pub use captcha::{CaptchaAgent, CaptchaKind, CaptchaSolverConfig};
 pub use ai_client::{AgentAiClient, AiProviderConfig, ModelSlots, ModelTier};
 pub mod budget;
 pub mod dom_access;
