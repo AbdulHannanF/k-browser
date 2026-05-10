@@ -17,6 +17,7 @@ use kitsune_agent::executor::WebViewCommand;
 use kitsune_agent::{FilePermSlot, StopFlag};
 use kitsune_cef::{CefBrowser, CefEvent, CefRect};
 use kitsune_core::tab::Tab;
+use kitsune_hil::gate::HilCheckpoint;
 use kitsune_hil::HilGate;
 use kitsune_vault::VaultBackend;
 
@@ -171,15 +172,32 @@ pub struct KitsuneBrowser {
     webview_cmd_rx: tokio::sync::mpsc::Receiver<WebViewCommand>,
     pub vault: Option<Arc<VaultBackend>>,
     pub hil_gate: Arc<HilGate>,
+    /// Receives HIL checkpoints from the in-process agent runtime.
+    hil_checkpoint_rx: tokio::sync::mpsc::Receiver<HilCheckpoint>,
+    /// Active checkpoint waiting for the user's decision in the dialog.
+    pub hil_pending_checkpoint: Option<HilCheckpoint>,
 
     // Settings state
     pub show_settings: bool,
+    pub settings_tab: SettingsTab,
     pub settings_provider: SettingsProvider,
     pub settings_api_key: String,
     pub settings_endpoint: String,
     pub settings_model: String,
     pub settings_saved: bool,
     pub settings_test_status: Option<String>,
+
+    // Settings — Profile tab
+    pub profile_folder: String,
+    pub reindex_requested: bool,
+
+    // Settings — Agents tab
+    pub captcha_solver_url: String,
+    pub captcha_solver_key: String,
+    pub orchestrator_model: String,
+    pub worker_model: String,
+    pub fast_model: String,
+    pub save_captcha_key_requested: bool,
 
     // Downloads
     pub downloads: Vec<DownloadItem>,
@@ -194,6 +212,14 @@ pub struct KitsuneBrowser {
 
     /// Cooperative stop flag — set to true when the user clicks Stop.
     pub agent_stop_flag: StopFlag,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SettingsTab {
+    #[default]
+    Llm,
+    Profile,
+    Agents,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -239,11 +265,11 @@ impl KitsuneBrowser {
         initial_tab.active = true;
         initial_tab.url = Some(DEFAULT_HOME.to_string());
 
-        // Try to construct the vault. On dev systems without a keyring entry the
-        // first call writes a fresh secret salt; if keyring access is denied we
-        // simply leave the vault un-initialized — the agent loop will still run
-        // and surface a clear error if a sensitive action ever asks for it.
-        let vault = match VaultBackend::new("kitsune-dev", &[0; 32]) {
+        // Use keyring-backed KDF salt so every installation derives a unique key.
+        // Falls back gracefully to None if keyring access is denied (headless CI,
+        // first-run without keyring); the agent loop still works but sensitive
+        // actions will surface a clear error.
+        let vault = match VaultBackend::new_with_keyring("kitsune-dev") {
             Ok(v) => Some(Arc::new(v)),
             Err(e) => {
                 tracing::warn!("vault disabled: {}", e);
@@ -251,10 +277,10 @@ impl KitsuneBrowser {
             }
         };
 
-        // Hackathon path: auto-approving HIL gate so the loop runs end-to-end.
-        // Production wires the real gate's checkpoint receiver into the existing
-        // hil_dialog flow.
-        let hil_gate = Arc::new(HilGate::new_test_gate());
+        // Real HIL gate — checkpoints flow from the in-process agent runtime
+        // through hil_checkpoint_rx into the hil_dialog on every frame.
+        let (hil_gate_inner, hil_checkpoint_rx) = HilGate::new(100);
+        let hil_gate = Arc::new(hil_gate_inner);
 
         Self {
             tabs: vec![initial_tab],
@@ -279,13 +305,24 @@ impl KitsuneBrowser {
             webview_cmd_rx,
             vault,
             hil_gate,
+            hil_checkpoint_rx,
+            hil_pending_checkpoint: None,
             show_settings: false,
+            settings_tab: SettingsTab::Llm,
             settings_provider: SettingsProvider::Ollama,
             settings_api_key: String::new(),
             settings_endpoint: "http://localhost:11434".to_string(),
             settings_model: "llama3".to_string(),
             settings_saved: false,
             settings_test_status: None,
+            profile_folder: String::new(),
+            reindex_requested: false,
+            captcha_solver_url: String::new(),
+            captcha_solver_key: String::new(),
+            orchestrator_model: String::new(),
+            worker_model: String::new(),
+            fast_model: String::new(),
+            save_captcha_key_requested: false,
             downloads: Vec::new(),
             show_downloads: false,
             attached_files: Vec::new(),
@@ -384,7 +421,7 @@ impl KitsuneBrowser {
         self.cef.as_ref()
     }
 
-    fn init_browser(&mut self, frame: &mut eframe::Frame, rect: egui::Rect) {
+    fn init_browser(&mut self, frame: &mut eframe::Frame, rect: egui::Rect, scale: f32) {
         if self.cef.is_some() || self.startup_error.is_some() || !should_init_cef(rect) {
             return;
         }
@@ -413,7 +450,7 @@ impl KitsuneBrowser {
             match CefBrowser::new(
                 win32.hwnd.get() as isize,
                 url,
-                rect_to_cef_bounds(rect),
+                rect_to_cef_bounds(rect, scale),
                 Some(self.event_tx.clone()),
             ) {
                 Ok(browser) => {
@@ -579,6 +616,39 @@ impl KitsuneBrowser {
         }
     }
 
+    /// Drain the HIL checkpoint receiver and surface the next pending checkpoint
+    /// in the confirmation dialog. Only one checkpoint is shown at a time; new
+    /// ones queue behind it until the user resolves the active one.
+    fn process_hil_checkpoints(&mut self, ctx: &egui::Context) {
+        if self.hil_pending_checkpoint.is_some() || self.hil_action.is_some() {
+            return;
+        }
+        if let Ok(checkpoint) = self.hil_checkpoint_rx.try_recv() {
+            let p = &checkpoint.presentation;
+            let mut rows: Vec<(String, String)> = p
+                .data_involved
+                .iter()
+                .map(|d| ("Credential".to_string(), d.clone()))
+                .collect();
+            if let Some(cost) = &p.cost_display {
+                rows.push(("Cost".to_string(), cost.clone()));
+            }
+            rows.push((
+                "Reversible".to_string(),
+                if p.is_reversible { "Yes".to_string() } else { "No".to_string() },
+            ));
+            self.hil_action = Some(HilAction {
+                title: p.what_will_happen.clone(),
+                subtitle: p.domain_or_service.clone(),
+                rows,
+                total_secs: 30,
+                started_at: ctx.input(|i| i.time),
+            });
+            self.agent_state = AgentRunState::AwaitingHil;
+            self.hil_pending_checkpoint = Some(checkpoint);
+        }
+    }
+
     /// Drain the agent runtime's WebView command queue and execute each
     /// command against the live `CefBrowser` on the UI thread. Called from
     /// `update()` so we never need a `Send` reference to the WebView.
@@ -623,6 +693,7 @@ impl eframe::App for KitsuneBrowser {
         self.process_agent_events();
         self.process_webview_commands();
         self.process_file_perm_requests();
+        self.process_hil_checkpoints(ctx);
 
         // Fix HIL started_at if it hasn't been set yet
         if let Some(ref mut hil) = self.hil_action {
@@ -711,6 +782,10 @@ impl eframe::App for KitsuneBrowser {
         settings_dialog(ctx, self);
 
         // ── Center: WebView area ─────────────────────────────────────────
+        // egui reports rects in logical pixels; Win32/WebView2 needs physical
+        // pixels, so every coordinate must be scaled by pixels_per_point.
+        let scale = ctx.pixels_per_point();
+
         let viewport = egui::CentralPanel::default()
             .frame(egui::Frame::none().fill(KitsuneTheme::BG))
             .show(ctx, |ui| {
@@ -721,7 +796,7 @@ impl eframe::App for KitsuneBrowser {
             .response
             .rect;
 
-        self.init_browser(frame, viewport);
+        self.init_browser(frame, viewport, scale);
 
         if let Some(cef) = &self.cef {
             if self.show_settings || self.hil_action.is_some() || self.file_perm_pending.is_some() {
@@ -729,7 +804,7 @@ impl eframe::App for KitsuneBrowser {
                 // by collapsing its bounds.
                 cef.set_bounds(CefRect { x: 0, y: 0, width: 0, height: 0 });
             } else {
-                cef.set_bounds(rect_to_cef_bounds(viewport));
+                cef.set_bounds(rect_to_cef_bounds(viewport, scale));
             }
         }
 
@@ -817,12 +892,12 @@ fn render_fallback(ui: &mut egui::Ui, startup_error: Option<&str>, current_url: 
     });
 }
 
-fn rect_to_cef_bounds(rect: egui::Rect) -> CefRect {
+fn rect_to_cef_bounds(rect: egui::Rect, scale: f32) -> CefRect {
     CefRect {
-        x: rect.min.x.round() as i32,
-        y: rect.min.y.round() as i32,
-        width: rect.width().max(1.0).round() as u32,
-        height: rect.height().max(1.0).round() as u32,
+        x: (rect.min.x * scale).round() as i32,
+        y: (rect.min.y * scale).round() as i32,
+        width: (rect.width() * scale).max(1.0).round() as u32,
+        height: (rect.height() * scale).max(1.0).round() as u32,
     }
 }
 
@@ -845,11 +920,23 @@ mod tests {
     #[test]
     fn rect_conversion_preserves_geometry() {
         let rect = egui::Rect::from_min_size(egui::pos2(10.4, 21.6), egui::vec2(639.6, 479.5));
-        let bounds = rect_to_cef_bounds(rect);
+        let bounds = rect_to_cef_bounds(rect, 1.0);
         assert_eq!(bounds.x, 10);
         assert_eq!(bounds.y, 22);
         assert_eq!(bounds.width, 640);
         assert_eq!(bounds.height, 480);
+    }
+
+    #[test]
+    fn rect_conversion_scales_for_dpi() {
+        // At 1.5× DPI, a rect at logical (100, 30) size 600×400 becomes
+        // physical (150, 45) size 900×600.
+        let rect = egui::Rect::from_min_size(egui::pos2(100.0, 30.0), egui::vec2(600.0, 400.0));
+        let bounds = rect_to_cef_bounds(rect, 1.5);
+        assert_eq!(bounds.x, 150);
+        assert_eq!(bounds.y, 45);
+        assert_eq!(bounds.width, 900);
+        assert_eq!(bounds.height, 600);
     }
 
     #[test]
