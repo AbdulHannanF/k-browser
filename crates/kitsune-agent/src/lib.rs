@@ -20,6 +20,8 @@ pub mod error;
 pub mod executor;
 pub mod loop_runtime;
 pub mod ollama_client;
+pub mod profile;
+pub use profile::{EducationEntry, LanguageEntry, ProfileIndexer, ProfileSummary};
 pub mod runtime;
 pub mod spec;
 pub mod tools;

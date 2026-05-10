@@ -20,6 +20,10 @@ futures = { workspace = true }
 parking_lot = { workspace = true }
 reqwest = { workspace = true }
 rand = { workspace = true }
+sha2 = { workspace = true }
+dirs = { workspace = true }
+pdf-extract = "0.7"
+docx-rs = "0.4"
 
 kitsune-vault = { path = "../kitsune-vault" }
 kitsune-hil = { path = "../kitsune-hil" }
