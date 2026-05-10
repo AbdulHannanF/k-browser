@@ -76,7 +76,18 @@ fn sha256_file(path: &Path) -> Option<[u8; 32]> {
 }
 
 fn extract_text_from_pdf(path: &Path) -> String {
-    pdf_extract::extract_text(path).unwrap_or_default()
+    let p = path.to_owned();
+    match std::panic::catch_unwind(|| pdf_extract::extract_text(&p)) {
+        Ok(Ok(text)) => text,
+        Ok(Err(e)) => {
+            tracing::warn!(path = %p.display(), "PDF parse error: {e}");
+            String::new()
+        }
+        Err(_) => {
+            tracing::warn!(path = %p.display(), "PDF extraction panicked");
+            String::new()
+        }
+    }
 }
 
 fn extract_text_from_docx(path: &Path) -> String {
@@ -128,6 +139,7 @@ pub struct ProfileIndexer {
     folder_path: PathBuf,
     summary: Arc<Mutex<Option<ProfileSummary>>>,
     file_hashes: Arc<Mutex<HashMap<PathBuf, [u8; 32]>>>,
+    text_cache: Arc<Mutex<HashMap<PathBuf, String>>>,
 }
 
 impl ProfileIndexer {
@@ -139,6 +151,7 @@ impl ProfileIndexer {
             folder_path,
             summary: Arc::new(Mutex::new(cached)),
             file_hashes: Arc::new(Mutex::new(HashMap::new())),
+            text_cache: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -153,6 +166,7 @@ impl ProfileIndexer {
         let mut raw_text = String::new();
         let mut source_files = Vec::new();
         let mut hashes = self.file_hashes.lock().await;
+        let mut text_cache = self.text_cache.lock().await;
 
         for entry in entries.flatten() {
             let path = entry.path();
@@ -163,13 +177,16 @@ impl ProfileIndexer {
                 Some(h) => h,
                 None => continue,
             };
-            if hashes.get(&path).copied() == Some(new_hash) {
-                info!(path = %path.display(), "Skipping unchanged file");
-                continue;
-            }
-            hashes.insert(path.clone(), new_hash);
-
-            let text = extract_text(&path);
+            let text = if hashes.get(&path).copied() == Some(new_hash) {
+                // File unchanged — use cached text
+                text_cache.get(&path).cloned().unwrap_or_default()
+            } else {
+                // File changed or new — extract fresh text and update caches
+                hashes.insert(path.clone(), new_hash);
+                let t = extract_text(&path);
+                text_cache.insert(path.clone(), t.clone());
+                t
+            };
             if !text.trim().is_empty() {
                 raw_text.push_str(&text);
                 raw_text.push('\n');
@@ -182,11 +199,21 @@ impl ProfileIndexer {
             }
         }
         drop(hashes);
+        drop(text_cache);
 
         if raw_text.trim().is_empty() {
             return Err(AgentError::ExecutionError(
                 "No parseable text found in profile folder".into(),
             ));
+        }
+
+        const MAX_PROFILE_TEXT_CHARS: usize = 32_000;
+        if raw_text.len() > MAX_PROFILE_TEXT_CHARS {
+            tracing::warn!(
+                original_len = raw_text.len(),
+                "Profile text truncated to avoid token overflow"
+            );
+            raw_text.truncate(MAX_PROFILE_TEXT_CHARS);
         }
 
         let prompt = format!(
@@ -230,7 +257,10 @@ Documents:
             if let Some(parent) = cp.parent() {
                 let _ = std::fs::create_dir_all(parent);
             }
-            let _ = std::fs::write(&cp, json);
+            let tmp = cp.with_extension("json.tmp");
+            if std::fs::write(&tmp, &json).is_ok() {
+                let _ = std::fs::rename(&tmp, &cp);
+            }
         }
 
         let mut guard = self.summary.lock().await;
