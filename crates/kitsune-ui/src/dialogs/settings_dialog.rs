@@ -109,8 +109,10 @@ fn render_llm_tab(ui: &mut egui::Ui, browser: &mut KitsuneBrowser) {
             match browser.settings_provider {
                 SettingsProvider::Cloud => {
                     let preset = browser.settings_cloud_preset;
-                    browser.settings_endpoint = preset.default_endpoint().to_string();
-                    browser.settings_model = preset.default_model().to_string();
+                    if preset != CloudPreset::Custom {
+                        browser.settings_endpoint = preset.default_endpoint().to_string();
+                        browser.settings_model = preset.default_model().to_string();
+                    }
                 }
                 SettingsProvider::Ollama => {
                     browser.settings_endpoint = "http://localhost:11434".to_string();
@@ -133,7 +135,7 @@ fn render_llm_tab(ui: &mut egui::Ui, browser: &mut KitsuneBrowser) {
                 .family(egui::FontFamily::Monospace),
         );
         ui.add_space(4.0);
-        ui.horizontal(|ui| {
+        ui.with_layout(egui::Layout::left_to_right(egui::Align::Center).with_main_wrap(false), |ui| {
             for preset in [
                 CloudPreset::Claude,
                 CloudPreset::OpenAI,
@@ -152,8 +154,10 @@ fn render_llm_tab(ui: &mut egui::Ui, browser: &mut KitsuneBrowser) {
                 .min_size(egui::vec2(56.0, 22.0));
                 if ui.add(btn).clicked() && browser.settings_cloud_preset != preset {
                     browser.settings_cloud_preset = preset;
-                    browser.settings_endpoint = preset.default_endpoint().to_string();
-                    browser.settings_model = preset.default_model().to_string();
+                    if preset != CloudPreset::Custom {
+                        browser.settings_endpoint = preset.default_endpoint().to_string();
+                        browser.settings_model = preset.default_model().to_string();
+                    }
                     browser.settings_saved = false;
                     browser.settings_test_status = None;
                 }
